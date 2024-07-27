@@ -139,6 +139,9 @@ class TrainConfig(DispatcherConfig):
         ]
 
     def prepare(self, train_params: Dict[str, torch.Tensor]):
+        if self.evaluate_configs_ is None:
+            self.evaluate_configs_ = []
+
         # preparing for training task
         if self.task_name == "casual":
             self.task_ = CasualTask()
