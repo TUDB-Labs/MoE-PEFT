@@ -7,6 +7,7 @@ sentencepiece
 huggingface_hub
 scikit-learn
 tiktoken
+mixlora>=0.1.0,<0.2.0
 gradio==4.29.0
 peft==0.11.1
 pandas
