@@ -68,7 +68,7 @@ cd mlora
 conda create -n mlora python=3.11
 conda activate mlora
 # Install requirements
-pip3 install -r requirements.txt
+pip3 install -r requirements.txt --upgrade
 # Install extra requirements
 pip3 install ninja
 pip3 install bitsandbytes==0.43.1
@@ -120,7 +120,7 @@ conda create -n mlora python=3.11
 conda activate mlora
 # Install requirements (CUDA 12.1)
 pip3 install torch==2.3.1 --index-url https://download.pytorch.org/whl/cu121
-pip3 install -r requirements.txt
+pip3 install -r requirements.txt --upgrade
 # Install extra requirements
 pip3 install bitsandbytes==0.43.1
 ```
@@ -167,7 +167,7 @@ cd mlora
 conda create -n mlora python=3.11
 conda activate mlora
 # Install requirements
-pip3 install -r requirements.txt
+pip3 install -r requirements.txt --upgrade
 ```
 
 ## Verification

@@ -103,9 +103,17 @@ lora_target_modules = {
     "down_proj": False,
     "up_proj": False,
     # Phi names
+    "q_proj": False,
+    "k_proj": False,
+    "v_proj": False,
     "dense": False,
     "fc1": False,
     "fc2": False,
+    # Phi3 names
+    "qkv_proj": False,
+    "o_proj": False,
+    "gate_up_proj": False,
+    "down_proj": False,
     # GLM names
     "qkv_proj": False,
     "dense": False,

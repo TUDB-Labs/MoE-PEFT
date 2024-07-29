@@ -45,7 +45,7 @@ RUN . ~/.bashrc \
     && cd /mLoRA \
     && pyenv virtualenv $PYTHON_VERSION mlora \
     && pyenv local mlora \
-    && pip install -r ./requirements.txt
+    && pip install -r ./requirements.txt --upgrade
 
 WORKDIR /mLoRA
 
