@@ -305,12 +305,11 @@ class Phi3MLP(LLMFeedForward):
 
             lora_name = f"moe.{moe_name}.experts.{expert_idx}"
             if lora_name in self.gate_up_proj_.loras_:
-                lora_data = _mixtral_slice_tensor(hidden_states, top_x, input_dtype)
                 gate_up_states = self.gate_up_proj_.loras_[lora_name].forward(
-                    _mixtral_slice_tensor(common_gate_up, top_x, input_dtype), lora_data
+                    _mixtral_slice_tensor(common_gate_up, top_x, input_dtype),
+                    _mixtral_slice_tensor(hidden_states, top_x, input_dtype),
                 )
             else:
-                lora_data = None
                 gate_up_states = _mixtral_slice_tensor(
                     common_gate_up, top_x, input_dtype
                 )
@@ -320,7 +319,7 @@ class Phi3MLP(LLMFeedForward):
 
             if lora_name in self.down_proj_.loras_:
                 final_expert_states.append(
-                    self.down_proj_.loras_[lora_name].forward(  # LoRA a,b
+                    self.down_proj_.loras_[lora_name].forward(
                         self.down_proj_.base_layer_.forward(act_result),
                         act_result,
                     )
