@@ -4,15 +4,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 
-from .modelargs import LLMModelConfig, LLMModelInput
+from .config import LLMModelConfig, LLMModelInput
 
 
 @dataclass
-class Cache:
-    """
-    Base, abstract class for all caches. The actual data structure is specific to each subclass.
-    """
-
+class LLMCache:
     def update(
         self,
         key_states: torch.Tensor,
@@ -23,14 +19,12 @@ class Cache:
         raise NotImplementedError("Make sure to implement `update` in a subclass.")
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
-        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # TODO: deprecate this function in favor of `cache_position`
         raise NotImplementedError(
             "Make sure to implement `get_seq_length` in a subclass."
         )
 
     def get_max_length(self) -> Optional[int]:
-        """Returns the maximum sequence length of the cached states, if there is any."""
         raise NotImplementedError(
             "Make sure to implement `get_max_length` in a subclass."
         )
@@ -38,10 +32,6 @@ class Cache:
     def get_usable_length(
         self, new_seq_length: int, layer_idx: Optional[int] = 0
     ) -> int:
-        """Given the sequence length of the new inputs, returns the usable length of the cache."""
-        # Cache without size limit -> all cache is usable
-        # Cache with size limit -> if the length cache plus the length of the new inputs is larger the maximum cache
-        #   length, we will need to evict part of the cache (and thus not all cache is usable)
         max_length = self.get_max_length()
         previous_seq_length = self.get_seq_length(layer_idx)
         if max_length is not None and previous_seq_length + new_seq_length > max_length:
@@ -49,7 +39,6 @@ class Cache:
         return previous_seq_length
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
-        """Reorders the cache for beam search, given the selected beam indices."""
         for layer_idx in range(len(self.key_cache)):
             device = self.key_cache[layer_idx].device
             self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(
@@ -74,7 +63,7 @@ class LLMAttention(metaclass=ABCMeta):
         rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
         pass
 
@@ -86,7 +75,7 @@ class LLMFeedForward(metaclass=ABCMeta):
 
     @classmethod
     def _batch_forward(
-        self, data: torch.Tensor, input_args: LLMModelInput
+        self, hidden_states: torch.Tensor, input_args: LLMModelInput
     ) -> torch.Tensor:
         pass
 
@@ -97,9 +86,37 @@ class LLMFeedForward(metaclass=ABCMeta):
         pass
 
 
-class LLMDecoder(metaclass=ABCMeta):
+class LLMMoeBlock(metaclass=ABCMeta):
+    def __init__(self) -> None:
+        super().__init__()
+
+        self.adapter_name_: str = None
+        self.dtype_: torch.dtype = None
+        self.gate_: torch.nn.Linear = None
+        self.experts_: int = None
+        self.router_profile_: bool = False
+        self.profiler_: List[int] = None
+
     @classmethod
-    def state_dict(self) -> Dict[str, torch.nn.Module]:
+    def forward(
+        self,
+        residual: torch.Tensor,
+        hidden_states: torch.Tensor,
+        **kwargs,
+    ) -> Tuple:
+        pass
+
+
+class LLMDecoder(metaclass=ABCMeta):
+    def __init__(self) -> None:
+        super().__init__()
+        self.self_attn_: LLMAttention = None
+        self.mlp_: LLMFeedForward = None
+
+    @classmethod
+    def state_dict(
+        self,
+    ) -> Tuple[Dict[str, torch.nn.Module], Dict[str, torch.nn.Module]]:
         return {}
 
     @classmethod
@@ -110,7 +127,7 @@ class LLMDecoder(metaclass=ABCMeta):
         rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
         pass
 
@@ -159,7 +176,7 @@ class LLMForCausalLM(metaclass=ABCMeta):
         attention_mask: torch.Tensor,
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
-        past_key_values: Optional[Cache],
+        past_key_values: Optional[LLMCache],
     ) -> torch.Tensor:
         pass
 

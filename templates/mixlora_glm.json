@@ -16,8 +16,8 @@
             "micro_batch_size": 8,
             "evaluate_batch_size": 16,
             "num_epochs": 2,
-            "r": 16,
-            "lora_alpha": 32,
+            "r": 14,
+            "lora_alpha": 28,
             "lora_dropout": 0.05,
             "target_modules": {
                 "qkv_proj": true,
@@ -25,7 +25,7 @@
                 "dense_h_to_4h": true,
                 "dense_4h_to_h": true
             },
-            "routing_strategy": "mixtral",
+            "routing_strategy": "mixlora",
             "num_experts": 8,
             "top_k": 2,
             "group_by_length": false

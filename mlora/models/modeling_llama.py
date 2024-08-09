@@ -10,12 +10,12 @@ from transformers.models.llama.modeling_llama import apply_rotary_pos_emb, repea
 from transformers.utils import is_flash_attn_2_available
 
 from mlora.backends import backend
-from mlora.common import (
+from mlora.modules import (
     ROPE_INIT_FUNCTIONS,
-    Cache,
     FeedForward,
     Linear,
     LLMAttention,
+    LLMCache,
     LLMDecoder,
     LLMFeedForward,
     LLMForCausalLM,
@@ -25,7 +25,7 @@ from mlora.common import (
     flash_attention_forward,
     prepare_4d_causal_attention_mask,
 )
-from mlora.common.mix_lora import _mixtral_slice_tensor
+from mlora.modules.mix_lora import _slice_tensor
 from mlora.utils import copy_parameters
 
 
@@ -166,7 +166,7 @@ class LlamaAttention(LLMAttention):
         rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
         batch_size, max_seq_len, _ = hidden_states.shape
 
@@ -230,7 +230,7 @@ class LlamaFlashAttention(LlamaAttention):
         rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
         batch_size, max_seq_len, _ = hidden_states.shape
 
@@ -362,21 +362,21 @@ class LlamaMLP(LLMFeedForward):
 
             lora_name = f"moe.{moe_name}.experts.{expert_idx}"
             if lora_name in self.w1_.loras_:
-                lora_data = _mixtral_slice_tensor(hidden_states, top_x, input_dtype)
+                lora_data = _slice_tensor(hidden_states, top_x, input_dtype)
                 w1 = self.w1_.loras_[lora_name].forward(
-                    _mixtral_slice_tensor(common_w1, top_x, input_dtype), lora_data
+                    _slice_tensor(common_w1, top_x, input_dtype), lora_data
                 )
             else:
                 lora_data = None
-                w1 = _mixtral_slice_tensor(common_w1, top_x, input_dtype)
+                w1 = _slice_tensor(common_w1, top_x, input_dtype)
 
             if lora_name in self.w3_.loras_:
                 w3 = self.w3_.loras_[lora_name].forward(
-                    _mixtral_slice_tensor(common_w3, top_x, input_dtype),
-                    _mixtral_slice_tensor(hidden_states, top_x, input_dtype, lora_data),
+                    _slice_tensor(common_w3, top_x, input_dtype),
+                    _slice_tensor(hidden_states, top_x, input_dtype, lora_data),
                 )
             else:
-                w3 = _mixtral_slice_tensor(common_w3, top_x, input_dtype)
+                w3 = _slice_tensor(common_w3, top_x, input_dtype)
 
             act_result = act_fn(w1) * w3
             if lora_name in self.w2_.loras_:
@@ -414,10 +414,8 @@ class LlamaDecoderLayer(LLMDecoder):
         self.input_layernorm_: LlamaRMSNorm = None
         self.post_attention_layernorm_: LlamaRMSNorm = None
 
-    def state_dict(self) -> Dict[str, nn.Module]:
-        linear_layers = self.self_attn_.state_dict()
-        linear_layers.update(self.mlp_.state_dict())
-        return linear_layers
+    def state_dict(self) -> Tuple[Dict[str, nn.Module], Dict[str, nn.Module]]:
+        return self.self_attn_.state_dict(), self.mlp_.state_dict()
 
     def forward(
         self,
@@ -426,7 +424,7 @@ class LlamaDecoderLayer(LLMDecoder):
         rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
 
         residual = hidden_states
@@ -498,7 +496,7 @@ class LlamaForCausalLM(LLMForCausalLM):
         attention_mask: torch.Tensor,
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
-        past_key_values: Optional[Cache],
+        past_key_values: Optional[LLMCache],
     ) -> torch.Tensor:
 
         return prepare_4d_causal_attention_mask(

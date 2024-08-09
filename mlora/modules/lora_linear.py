@@ -7,7 +7,8 @@ from transformers.utils import is_bitsandbytes_available
 
 from mlora.backends import backend
 
-from .modelargs import LLMModelInput, LoraConfig
+from .abstracts import LLMMoeBlock
+from .config import LLMModelInput, LoraConfig
 
 if is_bitsandbytes_available():
     import bitsandbytes as bnb
@@ -310,15 +311,20 @@ class Lora(nn.Module):
         mag_norm_scale = (self.magnitude_vector_ / weight_norm).view(1, -1)
         return mag_norm_scale * residual + mag_norm_scale * result_lora
 
-    def forward(
-        self, residual: torch.Tensor, hidden_states: torch.Tensor
-    ) -> torch.Tensor:
-        result_lora = (
+    def lora_forward(self, hidden_states: torch.Tensor):
+        return (
             self.lora_b_(self.lora_a_(self.dropout_(hidden_states.to(torch.float32))))
             * self.scaling_
         )
+
+    def forward(
+        self,
+        residual: torch.Tensor,
+        hidden_states: torch.Tensor,
+    ) -> torch.Tensor:
+        result_lora = self.lora_forward(hidden_states)
         if self.use_dora_:
-            return self.apply_dora(residual, result_lora).to(hidden_states.dtype)
+            return self.apply_dora(residual, result_lora).to(residual.dtype)
         else:
             return residual + result_lora.to(residual.dtype)
 
@@ -337,6 +343,15 @@ class Linear(nn.Module):
         self.device_ = torch.device(device)
         self.base_layer_ = base_layer.to(self.device_)
         self.loras_: Dict[str, Lora] = {}
+        self.moes_: Dict[str, LLMMoeBlock] = {}
+
+        if isinstance(self.base_layer_, Linear4bit):
+            self.out_features_, self.in_features_ = (
+                self.base_layer_.out_features,
+                self.base_layer_.in_features,
+            )
+        else:
+            self.out_features_, self.in_features_ = self.base_layer_.weight.shape
 
     def init_lora_weight(
         self, lora_config: LoraConfig, lora_tensor=(None, None), adapter_name=None
@@ -344,17 +359,12 @@ class Linear(nn.Module):
         if adapter_name is None:
             adapter_name = lora_config.adapter_name
 
-        if isinstance(self.base_layer_, Linear4bit):
-            out_dim, in_dim = (
-                self.base_layer_.out_features,
-                self.base_layer_.in_features,
-            )
-        else:
-            out_dim, in_dim = self.base_layer_.weight.shape
-
         if adapter_name not in self.loras_:
             self.loras_[adapter_name] = Lora(
-                self.base_layer_, (in_dim, out_dim), lora_config, self.device_
+                self.base_layer_,
+                (self.in_features_, self.out_features_),
+                lora_config,
+                self.device_,
             )
 
         self.loras_[adapter_name].reset_parameters(lora_tensor)
@@ -406,7 +416,7 @@ class Linear(nn.Module):
         for lora_config in input_args.batch_configs_:
             adapter_name = lora_config.adapter_name_
 
-            if adapter_name == "" or adapter_name not in self.loras_:
+            if adapter_name not in self.loras_:
                 loras += (None, None)
                 dropouts.append(None)
                 scalings.append(None)
@@ -464,20 +474,34 @@ class Linear(nn.Module):
             start_idx = lora_config.batch_start_idx_
             end_idx = lora_config.batch_end_idx_
 
-            if adapter_name == "" or adapter_name not in self.loras_:
+            if adapter_name in self.loras_:
+                fwd_fn = self.loras_[adapter_name].forward
+                kwargs = {}
+            elif adapter_name in self.moes_:
+                fwd_fn = self.moes_[adapter_name].forward
+                kwargs = {"lora_linear": self}
+            else:
+                backend.index_copy(
+                    next_states,
+                    0,
+                    lora_range[start_idx:end_idx],
+                    residual[start_idx:end_idx],
+                )
                 continue
 
-            lora_data = self.loras_[adapter_name].forward(
-                residual[start_idx:end_idx], hidden_states[start_idx:end_idx]
+            lora_data = fwd_fn(
+                residual=residual[start_idx:end_idx],
+                hidden_states=hidden_states[start_idx:end_idx],
+                **kwargs,
             )
-            backend.index_copy(next_states, lora_range[start_idx:end_idx], lora_data)
+            backend.index_copy(next_states, 0, lora_range[start_idx:end_idx], lora_data)
 
         return next_states
 
     def forward(
         self, hidden_states: torch.Tensor, input_args: LLMModelInput
     ) -> torch.Tensor:
-        if input_args.efficient_operator_:
+        if input_args.efficient_operator_ and len(self.moes_) == 0:
             return self._efficient_impl(hidden_states, input_args)
         else:
             return self._compatible_impl(hidden_states, input_args)

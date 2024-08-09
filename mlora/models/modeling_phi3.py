@@ -9,11 +9,11 @@ from transformers.models.phi3.modeling_phi3 import apply_rotary_pos_emb, repeat_
 from transformers.utils import is_flash_attn_2_available
 
 from mlora.backends import backend
-from mlora.common import (
-    Cache,
+from mlora.modules import (
     FeedForward,
     Linear,
     LLMAttention,
+    LLMCache,
     LLMDecoder,
     LLMFeedForward,
     LLMForCausalLM,
@@ -23,7 +23,7 @@ from mlora.common import (
     flash_attention_forward,
     prepare_4d_causal_attention_mask,
 )
-from mlora.common.mix_lora import _mixtral_slice_tensor
+from mlora.modules.mix_lora import _slice_tensor
 from mlora.utils import copy_parameters
 
 from .modeling_gemma2 import Gemma2RotaryEmbedding as Phi3RotaryEmbedding
@@ -72,7 +72,7 @@ class Phi3Attention(LLMAttention):
         rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
         bsz, q_len, _ = hidden_states.size()
 
@@ -135,7 +135,7 @@ class Phi3FlashAttention2(Phi3Attention):
         rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
 
         bsz, q_len, _ = hidden_states.size()
@@ -306,13 +306,11 @@ class Phi3MLP(LLMFeedForward):
             lora_name = f"moe.{moe_name}.experts.{expert_idx}"
             if lora_name in self.gate_up_proj_.loras_:
                 gate_up_states = self.gate_up_proj_.loras_[lora_name].forward(
-                    _mixtral_slice_tensor(common_gate_up, top_x, input_dtype),
-                    _mixtral_slice_tensor(hidden_states, top_x, input_dtype),
+                    _slice_tensor(common_gate_up, top_x, input_dtype),
+                    _slice_tensor(hidden_states, top_x, input_dtype),
                 )
             else:
-                gate_up_states = _mixtral_slice_tensor(
-                    common_gate_up, top_x, input_dtype
-                )
+                gate_up_states = _slice_tensor(common_gate_up, top_x, input_dtype)
 
             gate_states, up_states = gate_up_states.chunk(2, dim=-1)
             act_result = up_states * act_fn(gate_states)
@@ -344,10 +342,8 @@ class Phi3DecoderLayer(LLMDecoder):
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop_)
         self.post_attention_layernorm_: Phi3RMSNorm = None
 
-    def state_dict(self) -> Dict[str, nn.Module]:
-        linear_layers = self.self_attn_.state_dict()
-        linear_layers.update(self.mlp_.state_dict())
-        return linear_layers
+    def state_dict(self) -> Tuple[Dict[str, nn.Module], Dict[str, nn.Module]]:
+        return self.self_attn_.state_dict(), self.mlp_.state_dict()
 
     def forward(
         self,
@@ -356,7 +352,7 @@ class Phi3DecoderLayer(LLMDecoder):
         rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
         residual = hidden_states
         hidden_states = self.input_layernorm_(hidden_states)
@@ -421,7 +417,7 @@ class Phi3ForCausalLM(LLMForCausalLM):
         attention_mask: torch.Tensor,
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
-        past_key_values: Optional[Cache],
+        past_key_values: Optional[LLMCache],
     ) -> torch.Tensor:
 
         return prepare_4d_causal_attention_mask(

@@ -6,7 +6,7 @@ import datasets as hf_datasets
 import evaluate as hf_evaluate
 import torch
 
-from mlora.common import InputData, Prompt
+from mlora.modules import InputData, Prompt
 
 
 class BasicMetric:

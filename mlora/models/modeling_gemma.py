@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from transformers.models.gemma import modeling_gemma
 
 from mlora.backends import backend
-from mlora.common import FeedForward
 from mlora.models.modeling_llama import (
     LLAMA_ATTENTION_CLASSES as GEMMA_ATTENTION_CLASSES,
 )
@@ -14,6 +13,7 @@ from mlora.models.modeling_llama import (
     LlamaForCausalLM,
     LlamaMLP,
 )
+from mlora.modules import FeedForward
 from mlora.utils import copy_parameters
 
 

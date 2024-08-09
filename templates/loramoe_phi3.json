@@ -6,7 +6,7 @@
     "train_strategy": "optim",
     "lora": [
         {
-            "name": "mixlora",
+            "name": "loramoe",
             "task_name": "",
             "optim": "adamw",
             "scheduler_type": "constant",
@@ -16,18 +16,17 @@
             "micro_batch_size": 8,
             "evaluate_batch_size": 16,
             "num_epochs": 2,
-            "r": 16,
-            "lora_alpha": 32,
+            "r": 22,
+            "lora_alpha": 44,
             "lora_dropout": 0.05,
             "target_modules": {
-                "qkv_proj": true,
-                "o_proj": true,
+                "qkv_proj": false,
+                "o_proj": false,
                 "gate_up_proj": true,
                 "down_proj": true
             },
-            "routing_strategy": "mixlora",
-            "num_experts": 8,
-            "top_k": 2,
+            "routing_strategy": "loramoe",
+            "num_experts": 6,
             "group_by_length": false
         }
     ]

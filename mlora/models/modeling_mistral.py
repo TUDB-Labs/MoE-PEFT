@@ -8,7 +8,6 @@ from transformers.models.qwen2 import modeling_qwen2
 from transformers.utils import is_flash_attn_2_available
 
 from mlora.backends import backend
-from mlora.common import Cache, FeedForward, LLMModelInput, flash_attention_forward
 from mlora.models.modeling_llama import (
     LlamaAttention,
     LlamaConfig,
@@ -20,6 +19,7 @@ from mlora.models.modeling_llama import (
     apply_rotary_pos_emb,
     repeat_kv,
 )
+from mlora.modules import FeedForward, LLMCache, LLMModelInput, flash_attention_forward
 from mlora.utils import copy_parameters
 
 
@@ -55,7 +55,7 @@ class MistralFlashAttention(LlamaAttention):
         rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
         batch_size, max_seq_len, _ = hidden_states.shape
 

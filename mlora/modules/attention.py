@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from transformers.utils import is_flash_attn_2_available
 
-from .cache import Cache, StaticCache
+from .cache import LLMCache, StaticCache
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -21,7 +21,7 @@ def prepare_4d_causal_attention_mask(
     attention_mask: torch.Tensor,
     input_tensor: torch.Tensor,
     cache_position: torch.Tensor,
-    past_key_values: Cache,
+    past_key_values: LLMCache,
 ) -> torch.Tensor:
     past_seen_tokens = (
         past_key_values.get_seq_length() if past_key_values is not None else 0

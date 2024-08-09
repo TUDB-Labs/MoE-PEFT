@@ -1,13 +1,12 @@
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import torch
 
 from mlora.backends import backend
 
+from .abstracts import LLMFeedForward, LLMMoeBlock
+from .config import LLMModelInput
 from .lora_linear import Linear, get_range_tensor
-from .mix_lora import moe_layer_factory
-from .model import LLMFeedForward
-from .modelargs import LLMModelConfig, LLMModelInput, MixConfig
 
 
 class FeedForward(torch.nn.Module):
@@ -15,7 +14,7 @@ class FeedForward(torch.nn.Module):
         super().__init__()
         self.mlp_: LLMFeedForward = mlp
         # mix of experts
-        self.moes_: torch.ModuleDict = {}
+        self.moes_: Dict[str, LLMMoeBlock] = {}
 
     def state_dict(self) -> Dict[str, Linear]:
         return self.mlp_.state_dict()
@@ -26,27 +25,9 @@ class FeedForward(torch.nn.Module):
         if len(self.moes_) == 0:
             return self.mlp_._batch_forward(data, input_args), []
         else:
-            return self._mixlora_forward(data, input_args)
+            return self._moe_forward(data, input_args)
 
-    # MixLoRA
-    def init_moe_weight(
-        self,
-        args: LLMModelConfig,
-        config: MixConfig,
-        gate: Optional[torch.Tensor] = None,
-    ):
-        self.moes_[config.adapter_name] = moe_layer_factory(args, config)
-        if gate is None:
-            torch.nn.init.normal_(
-                self.moes_[config.adapter_name].gate_.weight,
-                mean=0.0,
-                std=config.router_init_range_,
-            )
-        else:
-            with torch.no_grad():
-                self.moes_[config.adapter_name].gate_.weight.copy_(gate)
-
-    def _mixlora_forward(self, data: torch.Tensor, input_args: LLMModelInput):
+    def _moe_forward(self, data: torch.Tensor, input_args: LLMModelInput):
         final_hidden_states = backend.init_tensor(data)
 
         if input_args.output_router_logits_:
@@ -63,7 +44,11 @@ class FeedForward(torch.nn.Module):
             if moe_name in self.moes_:
                 current_hidden_states, current_router_outputs = self.moes_[
                     moe_name
-                ].forward(self.mlp_, data[start_idx:end_idx])
+                ].forward(
+                    hidden_states=data[start_idx:end_idx],
+                    ffn_layer=self.mlp_,
+                    input_args=input_args,
+                )
 
                 if (
                     input_args.output_router_logits_

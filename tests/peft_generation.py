@@ -19,7 +19,7 @@ def main(
     with torch.inference_mode():
         outputs = model.generate(
             input_ids=input_ids,
-            max_new_tokens=100,
+            max_new_tokens=128,
         )
         output = tokenizer.batch_decode(
             outputs.detach().cpu().numpy(), skip_special_tokens=True

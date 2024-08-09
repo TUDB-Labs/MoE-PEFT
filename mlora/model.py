@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import math
@@ -9,22 +10,27 @@ from huggingface_hub import snapshot_download
 from transformers import AutoModelForCausalLM
 
 from mlora.backends import backend
-from mlora.common import (
+from mlora.models import from_pretrained
+from mlora.modules import (
     CHECKPOINT_CLASSES,
     AdapterConfig,
-    Cache,
+    Linear,
+    LLMCache,
     LLMDecoder,
     LLMForCausalLM,
     LLMModelConfig,
     LLMModelInput,
     LLMModelOutput,
+    LLMMoeBlock,
     LLMOutput,
     LoraConfig,
-    MixConfig,
+    LoraMoeConfig,
+    MixLoraConfig,
+    MolaConfig,
     lora_config_factory,
+    moe_layer_factory,
     router_loss_factory,
 )
-from mlora.models import from_pretrained
 from mlora.tasks import SequenceClassificationTask, task_dict
 from mlora.utils import is_package_available
 
@@ -154,75 +160,98 @@ class OutputLayer(torch.nn.Module):
 
 
 def init_lora_layer_weight(
-    layer: LLMDecoder,
-    args: LLMModelConfig,
-    config: LoraConfig,
-    weight: Optional[Dict[str, torch.Tensor]],
+    transformer_layer: LLMDecoder,
+    llm_config: LLMModelConfig,
+    lora_config: LoraConfig,
+    lora_weights: Optional[Dict[str, torch.Tensor]],
 ):
-    target = config.target_modules_
-    linear_layer_list = []
-    linear_layer_name_list = []
-    for name, module in layer.state_dict().items():
-        linear_layer_list.append(module)
-        linear_layer_name_list.append(name)
-
-    if isinstance(config, MixConfig):
-        if config.sparse_step_ is None or layer.layer_id_ % config.sparse_step_ == 1:
-            # Inject LoRA configs into FFN layer
-            gate_layer_name = f"mixlora.layers.{layer.layer_id_}.gate.weight"
-            layer.mlp_.init_moe_weight(
-                args=args,
-                config=config,
-                gate=None if weight is None else weight[gate_layer_name],
-            )
-            moe_layer_name_list = list(layer.mlp_.state_dict().keys())
-        else:
-            moe_layer_name_list = []
-
-        init_moe = True
+    target_modules = lora_config.target_modules_
+    attn_state_dict, mlp_state_dict = transformer_layer.state_dict()
+    attn_state_dict: Dict[str, torch.Tensor]
+    mlp_state_dict: Dict[str, torch.Tensor]
+    all_state_dict: Dict[str, torch.Tensor] = copy.copy(attn_state_dict)
+    all_state_dict.update(mlp_state_dict)
+    moe_init_strategy = "none"
+    if isinstance(lora_config, MixLoraConfig):
+        model_prefix_name = "mixlora"
+        moe_layer_name_list = list(mlp_state_dict.keys())
+        moe_init_strategy = "fused_mlp"
+    elif isinstance(lora_config, LoraMoeConfig):
+        model_prefix_name = "loramoe"
+        moe_layer_name_list = list(mlp_state_dict.keys())
+        moe_init_strategy = "plugin"
+    elif isinstance(lora_config, MolaConfig):
+        model_prefix_name = "mola"
+        moe_layer_name_list = list(all_state_dict.keys())
+        moe_init_strategy = "plugin"
     else:
+        model_prefix_name = "base_model.model.model"
         moe_layer_name_list = []
-        init_moe = False
 
-    for idx, layer_name in enumerate(linear_layer_name_list):
-        if layer_name in target and target[layer_name]:
-            if init_moe and layer_name in moe_layer_name_list:
-                for expert_idx in range(config.num_experts_):
+    assert len(moe_layer_name_list) == 0 or moe_init_strategy in ["plugin", "fused_mlp"]
+
+    if moe_init_strategy == "fused_mlp":
+        transformer_layer.mlp_.moes_[lora_config.adapter_name] = moe_layer_factory(
+            llm_config.dim_,
+            llm_config.device_,
+            lora_config,
+            (
+                None
+                if lora_weights is None
+                else lora_weights[
+                    f"{model_prefix_name}.layers.{transformer_layer.layer_id_}.mlp.moe_gate.weight"
+                ]
+            ),
+        )
+
+    for proj_name, lora_linear in all_state_dict.items():
+        lora_linear: Linear
+        if proj_name not in target_modules or not target_modules[proj_name]:
+            continue
+        module_name = (
+            "self_attn"
+            if proj_name in attn_state_dict
+            else ("mlp" if proj_name in mlp_state_dict else None)
+        )
+        module_name = f"{model_prefix_name}.layers.{transformer_layer.layer_id_}.{module_name}.{proj_name}"
+        if proj_name in moe_layer_name_list:
+            if moe_init_strategy == "plugin":
+                # init for gating mechanisms
+                lora_linear.moes_[lora_config.adapter_name] = moe_layer_factory(
+                    lora_linear.in_features_,
+                    llm_config.device_,
+                    lora_config,
+                    (
+                        lora_weights.get(f"{module_name}.moe_gate.weight", None)
+                        if lora_weights is not None
+                        else None
+                    ),
+                )
+
+            for expert_idx in range(lora_config.num_experts_):
+                if lora_weights is None:
                     lora_a = None
                     lora_b = None
-                    if weight is not None:
-                        lora_a_name = f"mixlora.layers.{layer.layer_id_}.experts.{expert_idx}.{layer_name}.lora_A.weight"
-                        lora_b_name = f"mixlora.layers.{layer.layer_id_}.experts.{expert_idx}.{layer_name}.lora_B.weight"
-                        if lora_a_name not in weight:
-                            raise f"can not found the layer {lora_a_name} in model"
-                        if lora_b_name not in weight:
-                            raise f"can not found the layer {lora_b_name} in model"
-                        lora_a = weight[lora_a_name]
-                        lora_b = weight[lora_b_name]
-
-                    linear_layer_list[idx].init_lora_weight(
-                        config.expert_config(expert_idx), (lora_a, lora_b)
+                else:
+                    lora_a = lora_weights.get(
+                        f"{module_name}.experts.{expert_idx}.lora_A.weight", None
                     )
-            else:
+                    lora_b = lora_weights.get(
+                        f"{module_name}.experts.{expert_idx}.lora_B.weight", None
+                    )
+
+                lora_linear.init_lora_weight(
+                    lora_config.expert_config(expert_idx), (lora_a, lora_b)
+                )
+        else:
+            if lora_weights is None:
                 lora_a = None
                 lora_b = None
-                if weight is not None:
-                    name_prefix = (
-                        "mixlora.layers"
-                        if init_moe
-                        else "base_model.model.model.layers"
-                    )
-                    lora_a_name = f"{name_prefix}.{layer.layer_id_}.self_attn.{layer_name}.lora_A.weight"
-                    lora_b_name = f"{name_prefix}.{layer.layer_id_}.self_attn.{layer_name}.lora_B.weight"
+            else:
+                lora_a = lora_weights.get(f"{module_name}.lora_A.weight", None)
+                lora_b = lora_weights.get(f"{module_name}.lora_B.weight", None)
 
-                    if lora_a_name not in weight:
-                        raise f"can not found the layer {lora_a_name} in model"
-                    if lora_b_name not in weight:
-                        raise f"can not found the layer {lora_b_name} in model"
-                    lora_a = weight[lora_a_name]
-                    lora_b = weight[lora_b_name]
-
-                linear_layer_list[idx].init_lora_weight(config, (lora_a, lora_b))
+            lora_linear.init_lora_weight(lora_config, (lora_a, lora_b))
 
 
 class LLMModel(torch.nn.Module):
@@ -246,7 +275,7 @@ class LLMModel(torch.nn.Module):
         self.adapter_configs_: Dict[str, LoraConfig] = {}
 
     def _prepare_inputs(
-        self, input_args: LLMModelInput, past_key_values: Optional[Cache] = None
+        self, input_args: LLMModelInput, past_key_values: Optional[LLMCache] = None
     ):
         assert input_args.batch_tokens_ is not None, "Model have no input."
         assert (
@@ -314,7 +343,7 @@ class LLMModel(torch.nn.Module):
         rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
         # decoder layers
         num_adapters = len(input_args.batch_configs_)
@@ -345,7 +374,7 @@ class LLMModel(torch.nn.Module):
 
     # compute the model: output probs
     def forward(
-        self, input_args: LLMModelInput, past_key_values: Optional[Cache] = None
+        self, input_args: LLMModelInput, past_key_values: Optional[LLMCache] = None
     ) -> List[LLMModelOutput]:
         input_ids, inputs_embeds, attention_mask, causal_mask, cache_position = (
             self._prepare_inputs(input_args, past_key_values)
@@ -477,7 +506,7 @@ class LLMModel(torch.nn.Module):
         self, config: AdapterConfig, weight: Optional[Dict[str, torch.Tensor]] = None
     ):
         # Patch for MixLoRA
-        if isinstance(config, MixConfig) and config.act_fn_ is None:
+        if isinstance(config, MixLoraConfig) and config.act_fn_ is None:
             config.act_fn_ = self.config_.hidden_act_
 
         self.adapter_configs_[config.adapter_name] = config
@@ -510,50 +539,75 @@ class LLMModel(torch.nn.Module):
     def get_adapter_weight_dict(self, adapter_name: str) -> Dict[str, torch.Tensor]:
         # return the lora weight and target_module's name
         lora_weight_dict = self.output_.layers_[adapter_name].state_dict()
-        for idx, transformer_layer in enumerate(self.model_.layers_):
-            if isinstance(self.adapter_configs_[adapter_name], MixConfig):
-                layer_prefix_name = f"mixlora.layers.{idx}.self_attn."
+        for transformer_layer in self.model_.layers_:
+            attn_state_dict, mlp_state_dict = transformer_layer.state_dict()
+            attn_state_dict: Dict[str, torch.Tensor]
+            mlp_state_dict: Dict[str, torch.Tensor]
+            all_state_dict: Dict[str, torch.Tensor] = copy.copy(attn_state_dict)
+            all_state_dict.update(mlp_state_dict)
+            if isinstance(self.adapter_configs_[adapter_name], MixLoraConfig):
+                model_prefix_name = "mixlora"
+                gate_layer_name = (
+                    f"mixlora.layers.{transformer_layer.layer_id_}.mlp.moe_gate.weight"
+                )
+                moe_layer_name_list = list(mlp_state_dict.keys())
+            elif isinstance(self.adapter_configs_[adapter_name], LoraMoeConfig):
+                model_prefix_name = "loramoe"
+                moe_layer_name_list = list(mlp_state_dict.keys())
+            elif isinstance(self.adapter_configs_[adapter_name], MolaConfig):
+                model_prefix_name = "mola"
+                moe_layer_name_list = list(all_state_dict.keys())
             else:
-                layer_prefix_name = f"base_model.model.model.layers.{idx}.self_attn."
+                model_prefix_name = "base_model.model.model"
+                moe_layer_name_list = []
 
-            lora_layer_list = []
-            lora_layer_name_list = []
-            for name, layer in transformer_layer.state_dict().items():
-                lora_layer_list.append(layer)
-                lora_layer_name_list.append(name)
+            # for fused MoEs such as MixLoRA
+            mlp_moe_layer: LLMMoeBlock = transformer_layer.mlp_.moes_.get(
+                adapter_name, None
+            )
+            if mlp_moe_layer is not None:
+                lora_weight_dict[gate_layer_name] = mlp_moe_layer.gate_.weight
 
-            for idx, lora_layer in enumerate(lora_layer_list):
-                if adapter_name in lora_layer.loras_:
-                    prefix_name = layer_prefix_name + lora_layer_name_list[idx]
-                    lora_weight_dict[f"{prefix_name}.lora_A.weight"] = (
-                        lora_layer.loras_[adapter_name].lora_a_.weight
+            for proj_name, lora_linear in all_state_dict.items():
+                lora_linear: Linear
+                module_name = (
+                    "self_attn"
+                    if proj_name in attn_state_dict
+                    else ("mlp" if proj_name in mlp_state_dict else None)
+                )
+                module_name = f"{model_prefix_name}.layers.{transformer_layer.layer_id_}.{module_name}.{proj_name}"
+                if proj_name in moe_layer_name_list:
+                    moe_layer = (
+                        lora_linear.moes_[adapter_name]
+                        if adapter_name in lora_linear.moes_
+                        else mlp_moe_layer
                     )
-                    lora_weight_dict[f"{prefix_name}.lora_B.weight"] = (
-                        lora_layer.loras_[adapter_name].lora_b_.weight
-                    )
-                elif adapter_name in transformer_layer.mlp_.moes_:
-                    moe_layer_prefix_name = (
-                        f"mixlora.layers.{transformer_layer.layer_id_}."
-                    )
-                    for expert_idx in range(
-                        transformer_layer.mlp_.moes_[adapter_name].experts_
-                    ):
+                    # for plugged MoEs such as LoRAMoE, MoLA, etc.
+                    if adapter_name in lora_linear.moes_:
+                        lora_weight_dict[f"{module_name}.moe_gate.weight"] = (
+                            lora_linear.moes_[adapter_name].gate_.weight
+                        )
+
+                    for expert_idx in range(moe_layer.experts_):
                         moe_lora_name = f"moe.{adapter_name}.experts.{expert_idx}"
-                        if moe_lora_name in lora_layer.loras_:
+                        lora_obj = lora_linear.loras_.get(moe_lora_name, None)
+                        if lora_obj is not None:
                             lora_weight_dict[
-                                moe_layer_prefix_name
-                                + f"experts.{expert_idx}."
-                                + f"{lora_layer_name_list[idx]}.lora_A.weight"
-                            ] = lora_layer.loras_[moe_lora_name].lora_a_.weight
+                                f"{module_name}.experts.{expert_idx}.lora_A.weight"
+                            ] = lora_obj.lora_a_.weight
                             lora_weight_dict[
-                                moe_layer_prefix_name
-                                + f"experts.{expert_idx}."
-                                + f"{lora_layer_name_list[idx]}.lora_B.weight"
-                            ] = lora_layer.loras_[moe_lora_name].lora_b_.weight
+                                f"{module_name}.experts.{expert_idx}.lora_B.weight"
+                            ] = lora_obj.lora_b_.weight
 
-                    lora_weight_dict[moe_layer_prefix_name + "gate.weight"] = (
-                        transformer_layer.mlp_.moes_[adapter_name].gate_.weight
-                    )
+                else:
+                    lora_obj = lora_linear.loras_.get(adapter_name, None)
+                    if lora_obj is not None:
+                        lora_weight_dict[f"{module_name}.lora_A.weight"] = (
+                            lora_obj.lora_a_.weight
+                        )
+                        lora_weight_dict[f"{module_name}.lora_B.weight"] = (
+                            lora_obj.lora_b_.weight
+                        )
 
         return lora_weight_dict
 
@@ -562,11 +616,14 @@ class LLMModel(torch.nn.Module):
     ) -> Tuple[LoraConfig, Dict[str, torch.Tensor]]:
         assert adapter_name in self.adapter_configs_, "adapter not exist"
         lora_weight = self.get_adapter_weight_dict(adapter_name)
+        lora_config = self.adapter_configs_.pop(adapter_name)
         self.output_.layers_.pop(adapter_name)
         for transformer_layer in self.model_.layers_:
-            lora_layer_list = []
-            for layer in transformer_layer.state_dict().values():
-                lora_layer_list.append(layer)
+            attn_state_dict, mlp_state_dict = transformer_layer.state_dict()
+            attn_state_dict: Dict[str, torch.Tensor]
+            mlp_state_dict: Dict[str, torch.Tensor]
+            lora_layer_list = list(attn_state_dict.values())
+            lora_layer_list.extend(mlp_state_dict.values())
 
             for lora_layer in lora_layer_list:
                 if adapter_name in lora_layer.loras_:
@@ -579,11 +636,16 @@ class LLMModel(torch.nn.Module):
                         lora_layer.loras_.pop(moe_lora_name, None)
 
                     transformer_layer.mlp_.moes_.pop(adapter_name)
+                elif adapter_name in lora_layer.moes_:
+                    for expert_idx in range(lora_layer.moes_[adapter_name].experts_):
+                        moe_lora_name = f"moe.{adapter_name}.experts.{expert_idx}"
+                        lora_layer.loras_.pop(moe_lora_name, None)
 
-        lora_config = self.adapter_configs_.pop(adapter_name)
+                    lora_layer.moes_.pop(lora_config.adapter_name, None)
+
         return lora_config, lora_weight
 
-    def load_adapter(self, name_or_path: str, adapter_name: str = None):
+    def load_adapter(self, name_or_path: str, adapter_name: Optional[str] = None):
         if adapter_name is None:
             adapter_name = name_or_path
 

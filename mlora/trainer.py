@@ -9,10 +9,10 @@ import torch
 from transformers import get_scheduler
 
 from .backends import no_cache
-from .common import LLMModelOutput, Prompt
 from .dispatcher import Dispatcher, DispatcherConfig, TrainTask
 from .evaluator import EvaluateConfig, evaluate
 from .model import LLMModel
+from .modules import LLMModelOutput, Prompt
 from .prompter import Prompter
 from .tasks import BasicTask, CasualTask, MultiTask, task_dict
 from .tokenizer import Tokenizer
@@ -158,11 +158,22 @@ class TrainConfig(DispatcherConfig):
             raise ValueError(
                 f"error batch_size {self.batch_size} and micro batch size {self.micro_batch_size}"
             )
+
         self.accumulation_step_ = self.batch_size / self.micro_batch_size
         self.training_steps_ = 0
         # preparing optimizer
         paramas_count = sum(t.numel() for t in train_params.values() if t.requires_grad)
         logging.info(f"{self.adapter_name} total trainable params: {paramas_count}")
+        paramas_count_except_gates = sum(
+            t.numel()
+            for n, t in train_params.items()
+            if "moe_gate" not in n and t.requires_grad
+        )
+        if paramas_count_except_gates != paramas_count:
+            logging.info(
+                f"{self.adapter_name} total trainable params (except gates): {paramas_count_except_gates}"
+            )
+
         grouped_parameters = self._optimizer_grouped_parameters(train_params)
         if self.optimizer_type == "sgd":
             self.optimizer_ = torch.optim.SGD(

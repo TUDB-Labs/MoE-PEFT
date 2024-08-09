@@ -1,11 +1,25 @@
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
 from transformers.activations import ACT2FN
 
-from .model import LLMFeedForward
-from .modelargs import LLMModelConfig, MixConfig
+from .abstracts import LLMFeedForward, LLMModelInput, LLMMoeBlock
+from .config import MixLoraConfig
+
+
+def _slice_tensor(
+    data: torch.Tensor,
+    slice: torch.Tensor,
+    dtype: torch.dtype,
+    last_value: Optional[torch.Tensor] = None,
+):
+    if last_value is None:
+        # for macOS debugging, please uncomment this line
+        # assert data.dtype in (torch.float, torch.int, torch.bool)
+        return data[None, slice].reshape(-1, data.shape[-1]).to(dtype)
+    else:
+        return last_value
 
 
 def _mixtral_load_balancing_loss_func(
@@ -14,26 +28,6 @@ def _mixtral_load_balancing_loss_func(
     top_k: int,
     attention_mask: Optional[torch.Tensor] = None,
 ) -> float:
-    r"""
-    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
-
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
-    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
-    experts is too unbalanced.
-
-    Args:
-        gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
-            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
-            shape [batch_size X sequence_length, num_experts].
-        attention_mask (`torch.Tensor`, None):
-            The attention_mask used in forward function
-            shape [batch_size X sequence_length] if not None.
-        num_experts (`int`, *optional*):
-            Number of experts
-
-    Returns:
-        The auxiliary loss.
-    """
     compute_device = gate_logits[0].device
     concatenated_gate_logits = torch.cat(
         [layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0
@@ -90,7 +84,7 @@ def _mixtral_load_balancing_loss_func(
 
 
 class MixtralRouterLoss(torch.nn.Module):
-    def __init__(self, config: MixConfig) -> None:
+    def __init__(self, config: MixLoraConfig) -> None:
         super().__init__()
         self.aux_loss_coef = config.router_aux_loss_coef_
         self.experts = config.num_experts_
@@ -102,52 +96,68 @@ class MixtralRouterLoss(torch.nn.Module):
         )
 
 
-def _mixtral_slice_tensor(
-    data: torch.Tensor,
-    slice: torch.Tensor,
-    dtype: torch.dtype,
-    last_value: Optional[torch.Tensor] = None,
-):
-    if last_value is None:
-        # for macOS debugging, please uncomment this line
-        # assert data.dtype in (torch.float, torch.int, torch.bool)
-        return data[None, slice].reshape(-1, data.shape[-1]).to(dtype)
-    else:
-        return last_value
-
-
 def _mixtral_compatible_forward(
-    mlp: LLMFeedForward, moe_name: str, act_fn, expert_mask, hidden_states, input_dtype
+    ffn_layer: LLMFeedForward,
+    moe_name: str,
+    act_fn: torch.nn.Module,
+    expert_mask: torch.Tensor,
+    hidden_states: torch.Tensor,
+    input_dtype: torch.device,
 ):
     final_expert_states = []
     for expert_idx in range(expert_mask.shape[0]):
         _, top_x = torch.where(expert_mask[expert_idx])
         lora_name = f"moe.{moe_name}.experts.{expert_idx}"
-        lora_data = _mixtral_slice_tensor(hidden_states, top_x, input_dtype)
-        final_expert_states.append(mlp._lora_forward(lora_name, act_fn, lora_data))
+        lora_data = _slice_tensor(hidden_states, top_x, input_dtype)
+        final_expert_states.append(
+            ffn_layer._lora_forward(lora_name, act_fn, lora_data)
+        )
 
     return final_expert_states
 
 
-class MixtralSparseMoe(torch.nn.Module):
-    def __init__(self, llm_config: LLMModelConfig, config: MixConfig) -> None:
+class MixtralSparseMoe(LLMMoeBlock):
+    def __init__(
+        self,
+        in_features: int,
+        device: torch.device,
+        config: MixLoraConfig,
+        gate: Optional[torch.Tensor] = None,
+    ) -> None:
         super().__init__()
 
         self.adapter_name_: str = config.adapter_name
         self.dtype_: torch.dtype = torch.float32
         self.gate_ = torch.nn.Linear(
-            llm_config.dim_,
+            in_features,
             config.num_experts_,
             bias=False,
-            device=llm_config.device_,
+            device=device,
             dtype=self.dtype_,
         )
-        self.act_ = ACT2FN[config.act_fn_]
+        self.act_ = (
+            ACT2FN[config.act_fn_]
+            if isinstance(config.act_fn_, str)
+            else config.act_fn_
+        )
         self.experts_: int = config.num_experts_
         self.topk_: int = config.top_k_
         self.jitter_noise_: float = config.jitter_noise_
         self.router_profile_: bool = False
         self.profiler_: List[int] = None
+
+        if gate is None:
+            torch.nn.init.normal_(
+                self.gate_.weight,
+                mean=0.0,
+                std=config.router_init_range_,
+            )
+        else:
+            with torch.no_grad():
+                self.gate_.weight.copy_(gate)
+
+    def state_dict(self) -> Dict[str, torch.nn.Module]:
+        return {"gate": self.gate_.weight}
 
     def _profiling(
         self, batch_size: int, sequence_length: int, selected_experts: torch.Tensor
@@ -171,10 +181,15 @@ class MixtralSparseMoe(torch.nn.Module):
                 pressure = (router_statistic_[idx] / batch_size) / sequence_length
                 self.profiler_[idx] = (self.profiler_[idx] + pressure) / 2
 
-    def forward(self, mlp: LLMFeedForward, hidden_states: torch.Tensor) -> Tuple:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        ffn_layer: LLMFeedForward,
+        input_args: LLMModelInput,
+    ) -> Tuple:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
 
-        if self.jitter_noise_ > 0:
+        if not input_args.inference_mode_ and self.jitter_noise_ > 0:
             # Multiply the token inputs by the uniform distribution - adding some noise
             hidden_states *= torch.empty_like(hidden_states).uniform_(
                 1.0 - self.jitter_noise_, 1.0 + self.jitter_noise_
@@ -207,13 +222,13 @@ class MixtralSparseMoe(torch.nn.Module):
         ).permute(2, 1, 0)
 
         # Perform the computation on each expert
-        if hasattr(mlp, "_mixlora_forward"):
-            expert_states = mlp._mixlora_forward(
+        if input_args.efficient_operator_ and hasattr(ffn_layer, "_mixlora_forward"):
+            expert_states = ffn_layer._mixlora_forward(
                 self.adapter_name_, self.act_, expert_mask, hidden_states, input_dtype
             )
         else:
             expert_states = _mixtral_compatible_forward(
-                mlp,
+                ffn_layer,
                 self.adapter_name_,
                 self.act_,
                 expert_mask,
@@ -304,7 +319,7 @@ def _switch_unpack_router_logits(router_outputs):
 
 
 class SwitchRouterLoss(torch.nn.Module):
-    def __init__(self, config: MixConfig) -> None:
+    def __init__(self, config: MixLoraConfig) -> None:
         super().__init__()
         self.experts = config.num_experts_
         self.expert_capacity_ = config.expert_capacity_
@@ -323,20 +338,30 @@ class SwitchRouterLoss(torch.nn.Module):
         return self.z_loss_coef * z_loss + self.aux_loss_coef * aux_loss
 
 
-class SwitchSparseMoe(torch.nn.Module):
-    def __init__(self, llm_config: LLMModelConfig, config: MixConfig) -> None:
+class SwitchSparseMoe(LLMMoeBlock):
+    def __init__(
+        self,
+        in_features: int,
+        device: torch.device,
+        config: MixLoraConfig,
+        gate: Optional[torch.Tensor] = None,
+    ) -> None:
         super().__init__()
 
         self.adapter_name_: str = config.adapter_name
         self.dtype_: torch.dtype = torch.float32
         self.gate_ = torch.nn.Linear(
-            llm_config.dim_,
+            in_features,
             config.num_experts_,
             bias=False,
-            device=llm_config.device_,
+            device=device,
             dtype=self.dtype_,
         )
-        self.act_ = ACT2FN[config.act_fn_]
+        self.act_ = (
+            ACT2FN[config.act_fn_]
+            if isinstance(config.act_fn_, str)
+            else config.act_fn_
+        )
         self.experts_: int = config.num_experts_
         self.dropout_ = (
             torch.nn.Dropout(config.ffn_dropout_)
@@ -347,6 +372,16 @@ class SwitchSparseMoe(torch.nn.Module):
         self.jitter_noise_: float = config.jitter_noise_
         self.router_profile_: bool = False
         self.profiler_: List[int] = None
+
+        if gate is None:
+            torch.nn.init.normal_(
+                self.gate_.weight,
+                mean=0.0,
+                std=config.router_init_range_,
+            )
+        else:
+            with torch.no_grad():
+                self.gate_.weight.copy_(gate)
 
     def _profiling(
         self, batch_size: int, sequence_length: int, router_mask: torch.Tensor
@@ -372,8 +407,8 @@ class SwitchSparseMoe(torch.nn.Module):
                 pressure = (router_statistic_[idx] / batch_size) / sequence_length
                 self.profiler_[idx] = (self.profiler_[idx] + pressure) / 2
 
-    def route(self, hidden_states: torch.Tensor) -> Tuple:
-        if self.jitter_noise_ > 0:
+    def route(self, hidden_states: torch.Tensor, input_args: LLMModelInput) -> Tuple:
+        if not input_args.inference_mode_ and self.jitter_noise_ > 0:
             # Multiply the token inputs by the uniform distribution - adding some noise
             hidden_states = hidden_states * torch.empty_like(hidden_states).uniform_(
                 1.0 - self.jitter_noise_, 1.0 + self.jitter_noise_
@@ -397,13 +432,18 @@ class SwitchSparseMoe(torch.nn.Module):
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
         return expert_index, router_probs, router_logits
 
-    def forward(self, mlp: LLMFeedForward, hidden_states: torch.Tensor) -> Tuple:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        ffn_layer: LLMFeedForward,
+        input_args: LLMModelInput,
+    ) -> Tuple:
         batch_size, sequence_length, _ = hidden_states.shape
 
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(self.dtype_)
 
-        router_mask, router_probs, router_logits = self.route(hidden_states)
+        router_mask, router_probs, router_logits = self.route(hidden_states, input_args)
 
         self._profiling(batch_size, sequence_length, router_mask)
 
@@ -411,31 +451,13 @@ class SwitchSparseMoe(torch.nn.Module):
         for expert_idx in range(self.experts_):
             token_indices = router_mask[:, :, expert_idx].bool()
             lora_name = f"moe.{self.adapter_name_}.experts.{expert_idx}"
-            next_states[token_indices] = mlp._lora_forward(
+            next_states[token_indices] = ffn_layer._lora_forward(
                 lora_name, self.act_, hidden_states[token_indices].to(input_dtype)
             ).to(next_states.dtype)
 
-        hidden_states = self.dropout_(router_probs * next_states).to(input_dtype)
+        if input_args.inference_mode_:
+            hidden_states = hidden_states.to(input_dtype)
+        else:
+            hidden_states = self.dropout_(router_probs * next_states).to(input_dtype)
 
         return hidden_states, router_logits
-
-
-router_loss_dict = {"mixtral": MixtralRouterLoss, "switch": SwitchRouterLoss}
-
-
-def router_loss_factory(config: MixConfig) -> torch.nn.Module:
-    if config.routing_strategy_ not in router_loss_dict:
-        raise ValueError(f"Unknown routing strategy {config.routing_strategy_}")
-    if config.router_loss_:
-        return router_loss_dict[config.routing_strategy_](config)
-    else:
-        return None
-
-
-moe_layer_dict = {"mixtral": MixtralSparseMoe, "switch": SwitchSparseMoe}
-
-
-def moe_layer_factory(args: LLMModelConfig, config: MixConfig) -> torch.nn.Module:
-    if config.routing_strategy_ not in router_loss_dict:
-        raise ValueError(f"Unknown routing strategy {config.routing_strategy_}")
-    return moe_layer_dict[config.routing_strategy_](args, config)

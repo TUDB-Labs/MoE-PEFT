@@ -1,5 +1,6 @@
 import copy
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, TypeAlias, Union
 
 import torch
@@ -66,6 +67,11 @@ class LLMBatchConfig:
     batch_end_idx_: int = -1
 
 
+def _efficient_operator_factory():
+    efficient_operator = os.getenv("MLORA_EVALUATE_MODE") is None
+    return efficient_operator
+
+
 @dataclass
 class LLMModelInput:
     batch_configs_: List[LLMBatchConfig] = None
@@ -76,7 +82,7 @@ class LLMModelInput:
     output_router_logits_: bool = True
 
     gradient_checkpoint_: str = "none"
-    efficient_operator_: bool = True
+    efficient_operator_: bool = field(default_factory=_efficient_operator_factory)
     inference_mode_: bool = False
 
 
@@ -196,11 +202,11 @@ class LoraConfig(AdapterConfig):
         return config
 
 
-available_routing_strategies = ["mixtral", "switch"]
+available_routing_strategies = ["mixlora", "mixlora-switch"]
 
 
 @dataclass
-class MixConfig(LoraConfig):
+class MixLoraConfig(LoraConfig):
     # expert lora
     expert_config_: LoraConfig = None
     # router config
@@ -210,7 +216,7 @@ class MixConfig(LoraConfig):
     jitter_noise_: float = None
     router_loss_: bool = True
     num_experts_: int = None
-    act_fn_: Optional[str] = None
+    act_fn_: Optional[Union[str, torch.nn.Module]] = None
     # mixtral config
     top_k_: int = None
     # switch transformers config
@@ -219,7 +225,7 @@ class MixConfig(LoraConfig):
     ffn_dropout_: float = None
     sparse_step_: int = None
 
-    def check(self) -> "MixConfig":
+    def check(self) -> "MixLoraConfig":
         super().check()
         if self.expert_config_ is not None:
             self.expert_config_.check()
@@ -240,9 +246,9 @@ class MixConfig(LoraConfig):
         assert self.act_fn_ is None or (
             isinstance(self.act_fn_, str) and self.act_fn_ in ACT2FN
         )
-        if self.routing_strategy_ == "mixtral":
+        if self.routing_strategy_ == "mixlora":
             assert isinstance(self.top_k_, int) and self.top_k_ > 0
-        elif self.routing_strategy_ == "switch":
+        elif self.routing_strategy_ == "mixlora-switch":
             assert (
                 isinstance(self.router_z_loss_coef_, float)
                 and self.router_z_loss_coef_ >= 0
@@ -255,8 +261,8 @@ class MixConfig(LoraConfig):
         return self
 
     @staticmethod
-    def from_config(config: Dict[str, any]) -> "MixConfig":
-        lora_config = MixConfig(**LoraConfig.from_config(config).__dict__)
+    def from_config(config: Dict[str, any]) -> "MixLoraConfig":
+        lora_config = MixLoraConfig(**LoraConfig.from_config(config).__dict__)
         if "expert_lora" in config:
             expert_config = copy.deepcopy(config)
             expert_config.update(config["expert_lora"])
@@ -270,11 +276,11 @@ class MixConfig(LoraConfig):
         # silu for mixtral or gelu_new for switch transformers
         # left blank to automatically use the original act_fn of FFN
         lora_config.act_fn_ = config.get("act_fn", None)
-        if lora_config.routing_strategy_ == "mixtral":
+        if lora_config.routing_strategy_ == "mixlora":
             lora_config.router_init_range_ = config.get("router_init_range", 0.02)
             lora_config.jitter_noise_ = config.get("jitter_noise", 0.0)
             lora_config.top_k_ = config.get("top_k", 2)
-        elif lora_config.routing_strategy_ == "switch":
+        elif lora_config.routing_strategy_ == "mixlora-switch":
             lora_config.router_init_range_ = config.get("router_init_range", 1.0)
             lora_config.jitter_noise_ = config.get("jitter_noise", 0.01)
             lora_config.router_z_loss_coef_ = config.get(
@@ -298,11 +304,11 @@ class MixConfig(LoraConfig):
             config["expert_lora"] = expert_config
         config["routing_strategy"] = self.routing_strategy_
         config["num_experts"] = self.num_experts_
-        if self.act_fn_ is not None:
+        if self.act_fn_ is not None and isinstance(self.act_fn_, str):
             config["act_fn"] = self.act_fn_
-        if self.routing_strategy_ == "mixtral":
+        if self.routing_strategy_ == "mixlora":
             config["top_k"] = self.top_k_
-        elif self.routing_strategy_ == "switch":
+        elif self.routing_strategy_ == "mixlora-switch":
             config["expert_capacity"] = self.expert_capacity_
             config["sparse_step"] = self.sparse_step_
 
@@ -317,10 +323,107 @@ class MixConfig(LoraConfig):
         return config
 
 
+@dataclass
+class LoraMoeConfig(LoraConfig):
+    num_experts_: int = None
+    router_init_range_: float = None
+    routing_strategy_: str = "loramoe"
+
+    def check(self) -> "LoraMoeConfig":
+        super().check()
+        assert isinstance(self.num_experts_, int) and self.num_experts_ > 0
+        assert (
+            isinstance(self.router_init_range_, float) and self.router_init_range_ >= 0
+        )
+
+        return self
+
+    @staticmethod
+    def from_config(config: Dict[str, any]) -> "LoraMoeConfig":
+        return LoraMoeConfig(
+            num_experts_=config["num_experts"],
+            router_init_range_=config.get("router_init_range", 5.0),
+            **LoraConfig.from_config(config).__dict__,
+        )
+
+    def export(self) -> Dict[str, any]:
+        config = super().export()
+        config["peft_type"] = "LORAMOE"
+        config["num_experts"] = self.num_experts_
+
+        return config
+
+    def expert_config(self, expert_idx: int) -> LoraConfig:
+        config = copy.deepcopy(super())
+        config.adapter_name = f"moe.{self.adapter_name}.experts.{expert_idx}"
+        return config
+
+
+@dataclass
+class MolaConfig(LoraConfig):
+    top_k_: int = None
+    num_experts_: int = None
+    router_init_range_: float = None
+    routing_strategy_: str = "mola"
+
+    def check(self) -> "MolaConfig":
+        super().check()
+        assert isinstance(self.top_k_, int) and self.top_k_ > 0
+        assert isinstance(self.num_experts_, int) and self.num_experts_ > 0
+        assert (
+            isinstance(self.router_init_range_, float) and self.router_init_range_ >= 0
+        )
+
+        return self
+
+    @staticmethod
+    def from_config(config: Dict[str, any]) -> "MolaConfig":
+        return MolaConfig(
+            top_k_=config.get("top_k", 2),
+            num_experts_=config["num_experts"],
+            router_init_range_=config.get("router_init_range", 5.0),
+            **LoraConfig.from_config(config).__dict__,
+        )
+
+    def export(self) -> Dict[str, any]:
+        config = super().export()
+        config["peft_type"] = "MOLA"
+        config["top_k"] = self.top_k_
+        config["num_experts"] = self.num_experts_
+
+        return config
+
+    def expert_config(self, expert_idx: int) -> LoraConfig:
+        config = copy.deepcopy(super())
+        config.adapter_name = f"moe.{self.adapter_name}.experts.{expert_idx}"
+        return config
+
+
+peft_type_dict = {
+    "LORA": LoraConfig,
+    "MIXLORA": MixLoraConfig,
+    "LORAMOE": LoraMoeConfig,
+    "MOLA": MolaConfig,
+}
+
+routing_strategy_dict = {
+    "mixlora": MixLoraConfig,
+    "mixlora-switch": MixLoraConfig,
+    "loramoe": LoraMoeConfig,
+    "mola": MolaConfig,
+}
+
+
 def lora_config_factory(config: Dict[str, any]) -> LoraConfig:
-    if (
-        "peft_type" in config and config["peft_type"] == "MIXLORA"
-    ) or "routing_strategy" in config:
-        return MixConfig.from_config(config).check()
+    if peft_type_dict.get(config.get("peft_type", ""), None) is not None:
+        config_class: TypeAlias[AdapterConfig] = peft_type_dict[config["peft_type"]]
+    elif (
+        routing_strategy_dict.get(config.get("routing_strategy", ""), None) is not None
+    ):
+        config_class: TypeAlias[AdapterConfig] = routing_strategy_dict[
+            config["routing_strategy"]
+        ]
     else:
-        return LoraConfig.from_config(config).check()
+        config_class = LoraConfig
+
+    return config_class.from_config(config).check()

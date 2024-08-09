@@ -3,7 +3,7 @@ from typing import List, Union
 
 from transformers import AutoTokenizer
 
-from .common import Masks, Tokens
+from .modules import Masks, Tokens
 
 
 class Tokenizer:

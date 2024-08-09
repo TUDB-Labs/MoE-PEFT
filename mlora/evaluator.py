@@ -6,8 +6,8 @@ from typing import Dict, List
 
 import torch
 
-from .common import InputData, LLMBatchConfig, LLMModelInput, MixConfig, Prompt
 from .model import LLMModel
+from .modules import InputData, LLMBatchConfig, LLMModelInput, MixLoraConfig, Prompt
 from .tasks import BasicMetric, BasicTask, CommonSenseTask, task_dict
 from .tokenizer import Tokenizer
 
@@ -93,7 +93,7 @@ class EvaluateConfig:
 def _prepare_tasks(model, tokenizer, configs):
     for config in configs:
         config.prepare(tokenizer, model.device_)
-        if not isinstance(model.adapter_configs_[config.adapter_name], MixConfig):
+        if not isinstance(model.adapter_configs_[config.adapter_name], MixLoraConfig):
             continue
         for layer in model.model_.layers_:
             if config.adapter_name in layer.mlp_.moes_:
@@ -172,7 +172,7 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
 
         if config.router_profile:
             adapter_config = model.adapter_configs_[config.adapter_name]
-            if isinstance(adapter_config, MixConfig):
+            if isinstance(adapter_config, MixLoraConfig):
                 router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
                 for layer in model.model_.layers_:
                     if config.adapter_name not in layer.mlp_.moes_:
@@ -225,7 +225,7 @@ def _compute_result(model, configs, save_file):
         result["metrics"] = compute_results
         if config.router_profile:
             adapter_config = model.adapter_configs_[config.adapter_name]
-            if isinstance(adapter_config, MixConfig):
+            if isinstance(adapter_config, MixLoraConfig):
                 router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
                 for layer in model.model_.layers_:
                     if config.adapter_name not in layer.mlp_.moes_:

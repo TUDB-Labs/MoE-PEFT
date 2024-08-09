@@ -3,11 +3,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 
-from .model import Cache
-from .modelargs import LLMModelConfig
+from .abstracts import LLMCache
+from .config import LLMModelConfig
 
 
-class DynamicCache(Cache):
+class DynamicCache(LLMCache):
     def __init__(self, **kwargs) -> None:
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
@@ -145,7 +145,7 @@ class DynamicCache(Cache):
             self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
 
 
-class StaticCache(Cache):
+class StaticCache(LLMCache):
     def __init__(
         self,
         config: LLMModelConfig,
@@ -323,7 +323,7 @@ class SlidingWindowCache(StaticCache):
             self.value_cache[layer_idx].zero_()
 
 
-class HybridCache(Cache):
+class HybridCache(LLMCache):
     def __init__(
         self,
         config: LLMModelConfig,

@@ -6,8 +6,8 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 import torch
 
 from mlora.backends import backend
-from mlora.common import LLMBatchConfig, LLMModelInput, Tokens, cache_factory
 from mlora.model import LLMModel
+from mlora.modules import LLMBatchConfig, LLMModelInput, Tokens, cache_factory
 from mlora.prompter import Prompter
 from mlora.tokenizer import Tokenizer
 

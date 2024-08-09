@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 
 import torch
 
-from .modelargs import LLMModelConfig
+from .config import LLMModelConfig
 
 
 def _compute_default_rope_parameters(

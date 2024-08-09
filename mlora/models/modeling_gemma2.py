@@ -8,11 +8,13 @@ from transformers.models.gemma2.modeling_gemma2 import apply_rotary_pos_emb, rep
 from transformers.utils import is_flash_attn_2_available
 
 from mlora.backends import backend
-from mlora.common import (
-    Cache,
+from mlora.models.modeling_gemma import GemmaEmbedding, GemmaRMSNorm
+from mlora.models.modeling_llama import LlamaMLP
+from mlora.modules import (
     FeedForward,
     Linear,
     LLMAttention,
+    LLMCache,
     LLMDecoder,
     LLMForCausalLM,
     LLMModelConfig,
@@ -20,8 +22,6 @@ from mlora.common import (
     flash_attention_forward,
     prepare_4d_causal_attention_mask,
 )
-from mlora.models.modeling_gemma import GemmaEmbedding, GemmaRMSNorm
-from mlora.models.modeling_llama import LlamaMLP
 from mlora.utils import copy_parameters, is_package_available
 
 
@@ -127,7 +127,7 @@ class Gemma2Attention(LLMAttention):
         rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
         bsz, q_len, _ = hidden_states.size()
 
@@ -208,7 +208,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
         rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
         bsz, q_len, _ = hidden_states.size()
 
@@ -301,10 +301,8 @@ class Gemma2DecoderLayer(LLMDecoder):
         self.post_feedforward_layernorm_: GemmaRMSNorm = None
         self.sliding_window_ = config.sliding_window_
 
-    def state_dict(self) -> Dict[str, nn.Module]:
-        linear_layers = self.self_attn_.state_dict()
-        linear_layers.update(self.mlp_.state_dict())
-        return linear_layers
+    def state_dict(self) -> Tuple[Dict[str, nn.Module], Dict[str, nn.Module]]:
+        return self.self_attn_.state_dict(), self.mlp_.state_dict()
 
     def forward(
         self,
@@ -313,7 +311,7 @@ class Gemma2DecoderLayer(LLMDecoder):
         rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
         if (
             self.config_.attn_implementation_ != "flash_attn"
@@ -411,7 +409,7 @@ class Gemma2ForCausalLM(LLMForCausalLM):
         attention_mask: torch.Tensor,
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
-        past_key_values: Optional[Cache],
+        past_key_values: Optional[LLMCache],
     ) -> torch.Tensor:
 
         return prepare_4d_causal_attention_mask(

@@ -28,7 +28,7 @@
                 "down_proj": true,
                 "up_proj": true
             },
-            "routing_strategy": "mixtral",
+            "routing_strategy": "mixlora",
             "num_experts": 8,
             "top_k": 2,
             "group_by_length": false

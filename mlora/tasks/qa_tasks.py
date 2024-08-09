@@ -4,7 +4,7 @@ from typing import List, Optional
 import datasets as hf_datasets
 import torch
 
-from mlora.common import InputData
+from mlora.modules import InputData
 
 from .common import AutoMetric, BasicMetric, CommonSenseTask
 

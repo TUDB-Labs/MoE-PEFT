@@ -9,11 +9,11 @@ from torch.nn import LayerNorm
 from transformers.utils import is_flash_attn_2_available
 
 from mlora.backends import backend
-from mlora.common import (
-    Cache,
+from mlora.modules import (
     FeedForward,
     Linear,
     LLMAttention,
+    LLMCache,
     LLMDecoder,
     LLMFeedForward,
     LLMForCausalLM,
@@ -21,7 +21,7 @@ from mlora.common import (
     LLMModelInput,
     flash_attention_forward,
 )
-from mlora.common.mix_lora import _mixtral_slice_tensor
+from mlora.modules.mix_lora import _slice_tensor
 from mlora.utils import copy_parameters
 
 
@@ -348,7 +348,7 @@ class GLMSelfAttention(LLMAttention):
         rotary_pos_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
         mixed_x_layer = self.query_key_value(hidden_states, input_args)
 
@@ -456,6 +456,11 @@ class GLMSelfAttention(LLMAttention):
         return output
 
 
+def swiglu(x):
+    x = torch.chunk(x, 2, dim=-1)
+    return F.silu(x[0]) * x[1]
+
+
 class GLMMLP(LLMFeedForward):
     def __init__(
         self,
@@ -466,10 +471,6 @@ class GLMMLP(LLMFeedForward):
         super().__init__()
         self.dense_h_to_4h: Linear = Linear(dense_h_to_4h, config.device_)
         self.dense_4h_to_h: Linear = Linear(dense_4h_to_h, config.device_)
-
-        def swiglu(x):
-            x = torch.chunk(x, 2, dim=-1)
-            return F.silu(x[0]) * x[1]
 
         self.activation_func = swiglu
 
@@ -522,16 +523,16 @@ class GLMMLP(LLMFeedForward):
 
             lora_name = f"moe.{moe_name}.experts.{expert_idx}"
             if lora_name in self.dense_h_to_4h.loras_:
-                lora_data = _mixtral_slice_tensor(hidden_states, top_x, input_dtype)
+                lora_data = _slice_tensor(hidden_states, top_x, input_dtype)
                 act_result = self.activation_func(
                     self.dense_h_to_4h.loras_[lora_name].forward(
-                        _mixtral_slice_tensor(common_dense_h_to_4h, top_x, input_dtype),
+                        _slice_tensor(common_dense_h_to_4h, top_x, input_dtype),
                         lora_data,
                     )
                 )
             else:
                 act_result = self.activation_func(
-                    _mixtral_slice_tensor(common_dense_h_to_4h, top_x, input_dtype)
+                    _slice_tensor(common_dense_h_to_4h, top_x, input_dtype)
                 )
 
             if lora_name in self.dense_4h_to_h.loras_:
@@ -550,10 +551,10 @@ class GLMMLP(LLMFeedForward):
 
 class GLMDecoderLayer(LLMDecoder):
     def __init__(
-        self, self_attention: GLMSelfAttention, mlp: FeedForward, config: GLMConfig
+        self, self_attn: GLMSelfAttention, mlp: FeedForward, config: GLMConfig
     ) -> None:
         super().__init__()
-        self.layer_id_ = self_attention.layer_idx
+        self.layer_id_ = self_attn.layer_idx
         self.apply_residual_connection_post_layernorm = (
             config.apply_residual_connection_post_layernorm
         )
@@ -568,7 +569,7 @@ class GLMDecoderLayer(LLMDecoder):
             dtype=config.dtype_,
         )
         # Self-attention layer.
-        self.self_attention: GLMSelfAttention = self_attention
+        self.self_attn_: GLMSelfAttention = self_attn
         self.hidden_dropout = config.hidden_dropout_
 
         # Post attention layer norm.
@@ -581,10 +582,8 @@ class GLMDecoderLayer(LLMDecoder):
         # mlp
         self.mlp_: FeedForward = mlp
 
-    def state_dict(self) -> Dict[str, torch.nn.Module]:
-        linear_layers = self.self_attention.state_dict()
-        linear_layers.update(self.mlp_.state_dict())
-        return linear_layers
+    def state_dict(self) -> Tuple[Dict[str, nn.Module], Dict[str, nn.Module]]:
+        return self.self_attn_.state_dict(), self.mlp_.state_dict()
 
     def forward(
         self,
@@ -593,11 +592,11 @@ class GLMDecoderLayer(LLMDecoder):
         rotary_pos_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[LLMCache] = None,
     ):
         layernorm_output = self.input_layernorm(hidden_states)
 
-        attention_output = self.self_attention.forward(
+        attention_output = self.self_attn_.forward(
             layernorm_output,
             input_args,
             rotary_pos_emb,
@@ -714,7 +713,7 @@ class GLMForCausalLM(LLMForCausalLM):
     def get_masks(
         self,
         input_ids: torch.Tensor,
-        past_key_values: Cache,
+        past_key_values: LLMCache,
         padding_mask: torch.Tensor,
     ):
         batch_size, seq_length, _ = input_ids.shape
@@ -748,7 +747,7 @@ class GLMForCausalLM(LLMForCausalLM):
         attention_mask: torch.Tensor,
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
-        past_key_values: Optional[Cache],
+        past_key_values: Optional[LLMCache],
     ) -> torch.Tensor:
         return self.get_masks(input_tensor, past_key_values, attention_mask)
 
@@ -774,6 +773,7 @@ class GLMForCausalLM(LLMForCausalLM):
             n_heads_=llm_config.num_attention_heads,
             n_kv_heads_=llm_config.multi_query_group_num,
             n_layers_=llm_config.num_layers,
+            hidden_act_=swiglu,
             hidden_dropout_=llm_config.hidden_dropout,
             vocab_size_=llm_config.vocab_size,
             pad_token_id_=llm_config.pad_token_id,

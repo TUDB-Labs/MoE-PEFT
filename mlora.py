@@ -262,6 +262,11 @@ if __name__ == "__main__":
 
     mlora_backend.empty_cache()
 
+    if os.getenv("MLORA_EVALUATE_MODE") is None:
+        logging.info("Using efficient operators.")
+    else:
+        logging.info("Using deterministic operators.")
+
     if args.inference:
         inference(
             model=model,
