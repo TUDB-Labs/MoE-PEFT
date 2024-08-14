@@ -460,11 +460,6 @@ class Phi3ForCausalLM(LLMForCausalLM):
             dtype_=llm_model.dtype,
         )
 
-        if use_sliding_window and attn_impl != "flash_attn":
-            raise ValueError(
-                f"Can not use sliding window attention with {attn_impl} attention."
-            )
-
         if llm_args.pad_token_id_ is None:
             llm_args.pad_token_id_ = -1
 

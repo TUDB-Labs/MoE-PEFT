@@ -153,18 +153,50 @@ def _upad_input(
     )
 
 
+def prepare_fa2_from_position_ids(query, key, value, position_ids):
+    query = query.view(-1, query.size(-2), query.size(-1))
+    key = key.view(-1, key.size(-2), key.size(-1))
+    value = value.view(-1, value.size(-2), value.size(-1))
+    position_ids = position_ids.flatten()
+    indices_q = torch.arange(
+        position_ids.size(0), device=position_ids.device, dtype=torch.int32
+    )
+
+    cu_seq_lens = torch.cat(
+        (
+            indices_q[position_ids == 0],
+            torch.tensor(
+                position_ids.size(), device=position_ids.device, dtype=torch.int32
+            ),
+        )
+    )
+
+    max_length = position_ids.max() + 1
+
+    return (
+        query,
+        key,
+        value,
+        indices_q,
+        (cu_seq_lens, cu_seq_lens),
+        (max_length, max_length),
+    )
+
+
 def flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor,
     query_length: int,
     is_causal: bool,
     dropout: float = 0.0,
+    position_ids: Optional[torch.Tensor] = None,
     softmax_scale: Optional[float] = None,
     sliding_window: Optional[int] = None,
     use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
+    deterministic: Optional[bool] = None,
 ):
     if not use_top_left_mask:
         causal = is_causal
@@ -180,6 +212,9 @@ def flash_attention_forward(
     flash_kwargs = (
         {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
     )
+
+    if deterministic is not None:
+        flash_kwargs["deterministic"] = deterministic
 
     if softcap is not None:
         flash_kwargs["softcap"] = softcap
@@ -209,12 +244,48 @@ def flash_attention_forward(
             **flash_kwargs,
         )
         attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+
+    # if position_ids is provided and check not all examples (row) contain only 1 sequence, and is in pre-fill/training stage
+    # then use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
+    elif (
+        position_ids is not None
+        and not (position_ids[:, -1] == position_ids.size(1) - 1).all()
+        and query_length != 1
+    ):
+        batch_size = query_states.size(0)
+        query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = (
+            prepare_fa2_from_position_ids(
+                query_states, key_states, value_states, position_ids
+            )
+        )
+
+        cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+        max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+        attn_output = flash_attn_varlen_func(
+            query_states,
+            key_states,
+            value_states,
+            cu_seqlens_q=cu_seqlens_q,
+            cu_seqlens_k=cu_seqlens_k,
+            max_seqlen_q=max_seqlen_in_batch_q,
+            max_seqlen_k=max_seqlen_in_batch_k,
+            dropout_p=dropout,
+            softmax_scale=softmax_scale,
+            causal=causal,
+            **flash_kwargs,
+        )
+
+        attn_output = attn_output.view(
+            batch_size, -1, attn_output.size(-2), attn_output.size(-1)
+        )
+
     else:
         attn_output = flash_attn_func(
             query_states,
             key_states,
             value_states,
-            dropout_p=dropout,
+            dropout,
             softmax_scale=softmax_scale,
             causal=causal,
             **flash_kwargs,

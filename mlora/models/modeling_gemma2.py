@@ -242,6 +242,11 @@ class Gemma2FlashAttention2(Gemma2Attention):
                 key_states, value_states, self.layer_idx_, cache_kwargs
             )
 
+        if attention_mask is not None:
+            seq_len = attention_mask.shape[1]
+            key_states = key_states[:, :, :seq_len]
+            value_states = value_states[:, :, :seq_len]
+
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
@@ -314,19 +319,23 @@ class Gemma2DecoderLayer(LLMDecoder):
         past_key_value: Optional[LLMCache] = None,
     ):
         if (
-            self.config_.attn_implementation_ != "flash_attn"
-            and self.config_.use_sliding_window_
+            self.config_.use_sliding_window_
             and self.is_sliding_
             and attention_mask is not None
         ):
-            min_dtype = torch.finfo(hidden_states.dtype).min
-            sliding_window_mask = torch.tril(
-                torch.ones_like(attention_mask, dtype=torch.bool),
-                diagonal=-self.sliding_window_,
-            )
-            attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
-            if attention_mask.shape[-1] <= 1:  # when decoding
-                attention_mask = attention_mask[:, :, :, -self.sliding_window_ :]
+            if self.config_.attn_implementation_ == "flash_attn":
+                attention_mask = attention_mask[:, -self.sliding_window_ :]
+            else:
+                min_dtype = torch.finfo(hidden_states.dtype).min
+                sliding_window_mask = torch.tril(
+                    torch.ones_like(attention_mask, dtype=torch.bool),
+                    diagonal=-self.sliding_window_,
+                )
+                attention_mask = torch.where(
+                    sliding_window_mask, min_dtype, attention_mask
+                )
+                if attention_mask.shape[-1] <= 1:  # when decoding
+                    attention_mask = attention_mask[:, :, :, -self.sliding_window_ :]
 
         residual = hidden_states
 
@@ -459,11 +468,6 @@ class Gemma2ForCausalLM(LLMForCausalLM):
             device_=torch.device(device),
             dtype_=llm_model.dtype,
         )
-
-        if use_sliding_window and attn_impl != "flash_attn":
-            raise ValueError(
-                f"Can not use sliding window attention with {attn_impl} attention."
-            )
 
         if model_config.pad_token_id_ is None:
             model_config.pad_token_id_ = -1

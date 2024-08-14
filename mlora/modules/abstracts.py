@@ -1,5 +1,4 @@
 from abc import ABCMeta
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
@@ -7,8 +6,10 @@ import torch
 from .config import LLMModelConfig, LLMModelInput
 
 
-@dataclass
-class LLMCache:
+class LLMCache(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
     def update(
         self,
         key_states: torch.Tensor,

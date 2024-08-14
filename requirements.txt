@@ -2,12 +2,12 @@ torch>=2.3.0,<2.4.0
 datasets
 evaluate
 accelerate
-transformers>=4.43.0,<4.44.0
+transformers>=4.44.0,<4.45.0
 sentencepiece
 huggingface_hub
 scikit-learn
 tiktoken
-mixlora>=0.2.1,<0.3.0
+mixlora>=0.2.2,<0.3.0
 gradio==4.29.0
 peft==0.11.1
 pandas

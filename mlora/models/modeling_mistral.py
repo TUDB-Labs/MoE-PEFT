@@ -204,11 +204,6 @@ class MistralForCausalLM(LlamaForCausalLM):
             dtype_=llm_model.dtype,
         )
 
-        if use_sliding_window and attn_impl != "flash_attn":
-            raise ValueError(
-                f"Can not use sliding window attention with {attn_impl} attention."
-            )
-
         # compatible with qwen2
         if isinstance(llm_config, modeling_qwen2.Qwen2Config):
             llm_args.max_window_layers_ = llm_config.max_window_layers

@@ -57,21 +57,24 @@ def _compute_llama3_parameters(
 
     low_freq_wavelen = old_context_len / low_freq_factor
     high_freq_wavelen = old_context_len / high_freq_factor
-    new_freqs = []
-    for freq in inv_freq:
-        wavelen = 2 * math.pi / freq
-        if wavelen < high_freq_wavelen:
-            new_freqs.append(freq)
-        elif wavelen > low_freq_wavelen:
-            new_freqs.append(freq / factor)
-        else:
-            assert low_freq_wavelen != high_freq_wavelen
-            smooth = (old_context_len / wavelen - low_freq_factor) / (
-                high_freq_factor - low_freq_factor
-            )
-            new_freqs.append((1 - smooth) * freq / factor + smooth * freq)
-    inv_freq = torch.tensor(new_freqs, dtype=inv_freq.dtype, device=inv_freq.device)
-    return inv_freq, attention_factor
+
+    wavelen = 2 * math.pi / inv_freq
+    # wavelen < high_freq_wavelen: do nothing
+    # wavelen > low_freq_wavelen: divide by factor
+    inv_freq_llama = torch.where(
+        wavelen > low_freq_wavelen, inv_freq / factor, inv_freq
+    )
+    # otherwise: interpolate between the two, using a smooth factor
+    smooth_factor = (old_context_len / wavelen - low_freq_factor) / (
+        high_freq_factor - low_freq_factor
+    )
+    smoothed_inv_freq = (
+        1 - smooth_factor
+    ) * inv_freq_llama / factor + smooth_factor * inv_freq_llama
+    is_medium_freq = ~(wavelen < high_freq_wavelen) * ~(wavelen > low_freq_wavelen)
+    inv_freq_llama = torch.where(is_medium_freq, smoothed_inv_freq, inv_freq_llama)
+
+    return inv_freq_llama, attention_factor
 
 
 ROPE_INIT_FUNCTIONS = {

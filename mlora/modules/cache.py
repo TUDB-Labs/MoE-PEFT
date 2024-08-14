@@ -2,6 +2,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
+from transformers.utils import is_torchdynamo_compiling
 
 from .abstracts import LLMCache
 from .config import LLMModelConfig
@@ -9,6 +10,7 @@ from .config import LLMModelConfig
 
 class DynamicCache(LLMCache):
     def __init__(self, **kwargs) -> None:
+        super().__init__()
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         self._seen_tokens = (
@@ -82,7 +84,6 @@ class DynamicCache(LLMCache):
         """Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
         negative to remove `max_length` tokens. This is used in assisted decoding and contrastive search.
         """
-
         # In case it is negative
         if max_length < 0:
             max_length = self.get_seq_length() - abs(max_length)
@@ -159,7 +160,6 @@ class StaticCache(LLMCache):
         self.max_cache_len = (
             config.max_seq_len_ if max_cache_len is None else max_cache_len
         )
-        # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         self.head_dim = config.head_dim_
 
         self.dtype = dtype if dtype is not None else torch.float32
@@ -167,23 +167,38 @@ class StaticCache(LLMCache):
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
+        # Note: There will be significant perf decrease if switching to use 5D tensors instead.
         cache_shape = (
             max_batch_size,
             self.num_key_value_heads,
             self.max_cache_len,
             self.head_dim,
         )
-        for _ in range(config.n_layers_):
-            # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
-            # breaks when updating the cache.
+        for idx in range(config.n_layers_):
             new_layer_key_cache = torch.zeros(
                 cache_shape, dtype=self.dtype, device=device
             )
             new_layer_value_cache = torch.zeros(
                 cache_shape, dtype=self.dtype, device=device
             )
-            torch._dynamo.mark_static_address(new_layer_key_cache)
-            torch._dynamo.mark_static_address(new_layer_value_cache)
+            # Notes:
+            # 1. `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
+            #     breaks when updating the cache. It can't be used if the cache code is being compiled (but in that case
+            #     it is not needed anyway)
+            # 2. `torch.export()` requires mutations to be registered as buffers.
+            if not is_torchdynamo_compiling():
+                self.register_buffer(
+                    f"key_cache_{idx}",
+                    torch.zeros(cache_shape, dtype=dtype, device=device),
+                )
+                self.register_buffer(
+                    f"value_cache_{idx}",
+                    torch.zeros(cache_shape, dtype=dtype, device=device),
+                )
+                new_layer_key_cache = getattr(self, f"key_cache_{idx}")
+                new_layer_value_cache = getattr(self, f"value_cache_{idx}")
+                torch._dynamo.mark_static_address(new_layer_key_cache)
+                torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
 
@@ -220,8 +235,18 @@ class StaticCache(LLMCache):
             k_out.copy_(key_states)
             v_out.copy_(value_states)
         else:
-            k_out[:, :, cache_position] = key_states
-            v_out[:, :, cache_position] = value_states
+            # Note: here we use `tensor.index_copy_(dim, index, tensor)` that is equivalent to
+            # `tensor[:, :, index] = tensor`, but the first one is compile-friendly and it does explicitly an in-place
+            # operation, that avoids copies and uses less memory.
+            try:
+                # If using several devices (e.g.: multiple GPUs), we need to ensure everything is on the same one
+                cache_position.to(device=k_out.device)
+                k_out.index_copy_(2, cache_position, key_states)
+                v_out.index_copy_(2, cache_position, value_states)
+            except NotImplementedError:
+                # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
+                k_out[:, :, cache_position] = key_states
+                v_out[:, :, cache_position] = value_states
 
         return k_out, v_out
 
@@ -253,6 +278,7 @@ class SlidingWindowCache(StaticCache):
         device,
         dtype=None,
     ) -> None:
+        super().__init__()
         if not hasattr(config, "sliding_window_") or config.sliding_window_ is None:
             raise ValueError(
                 "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
@@ -300,8 +326,14 @@ class SlidingWindowCache(StaticCache):
         k_out = k_out[:, :, indices]
         v_out = v_out[:, :, indices]
 
-        k_out[:, :, cache_position] = key_states
-        v_out[:, :, cache_position] = value_states
+        try:
+            cache_position.to(device=k_out.device)
+            k_out.index_copy_(2, cache_position, key_states)
+            v_out.index_copy_(2, cache_position, value_states)
+        except NotImplementedError:
+            # The operator 'aten::index_copy.out' is not currently implemented for the MPS device.
+            k_out[:, :, cache_position] = key_states
+            v_out[:, :, cache_position] = value_states
 
         # `_.zero()` followed by `+=` is equivalent `=`, but compile-friendly (without graph breaks due to assignment)
         self.key_cache[layer_idx].zero_()
@@ -332,6 +364,7 @@ class HybridCache(LLMCache):
         device="cpu",
         dtype=None,
     ) -> None:
+        super().__init__()
         if not hasattr(config, "sliding_window_") or config.sliding_window_ is None:
             raise ValueError(
                 "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
@@ -340,7 +373,6 @@ class HybridCache(LLMCache):
             )
         self.max_cache_len = max_cache_len
         self.max_batch_size = max_batch_size
-        # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         self.head_dim = config.head_dim_
 
         self.dtype = dtype if dtype is not None else torch.float32
