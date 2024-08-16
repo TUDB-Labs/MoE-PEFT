@@ -8,7 +8,7 @@ def main(
     base_model: str,
     adapter_name: str = "lora_0",
     train_data: str = "TUDB-Labs/Dummy-MoE-PEFT",
-    test_prompt: str = "Could you provide an introduction to MoE PEFT Factory?",
+    test_prompt: str = "Could you provide an introduction to MoE-PEFT?",
 ):
     moe_peft.setup_logging("INFO")
 

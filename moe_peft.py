@@ -11,7 +11,7 @@ from transformers.utils import is_flash_attn_2_available
 import moe_peft
 
 # Command Line Arguments
-parser = argparse.ArgumentParser(description="MoE PEFT Factory main program")
+parser = argparse.ArgumentParser(description="MoE-PEFT main program")
 parser.add_argument(
     "--base_model", type=str, required=True, help="Path to or name of base model"
 )

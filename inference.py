@@ -61,7 +61,7 @@ class Iteratorize:
         self.stop_now = True
 
 
-placeholder_text = "Could you provide an introduction to MoE PEFT Factory?"
+placeholder_text = "Could you provide an introduction to MoE-PEFT?"
 
 
 def main(
@@ -179,7 +179,7 @@ def main(
                 label="Output",
             )
         ],
-        title="MoE PEFT Factory LLM Evaluator",
+        title="MoE-PEFT LLM Evaluator",
         description="Evaluate language models and LoRA weights",  # noqa: E501
     ).queue().launch(server_name=server_name, share=share_gradio)
 

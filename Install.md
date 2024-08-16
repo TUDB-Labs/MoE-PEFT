@@ -1,4 +1,4 @@
-# Install MoE PEFT Factory
+# Install MoE-PEFT
 
 ## Table of Contents
 
@@ -44,7 +44,7 @@ moe_peft.backend.check_available()
 Expected output:
 
 ```
-MoE PEFT Factory: NVIDIA CUDA initialized successfully.
+MoE-PEFT: NVIDIA CUDA initialized successfully.
 ```
 
 ## Linux (Ubuntu, Debian, Fedora, etc.)
@@ -94,7 +94,7 @@ moe_peft.backend.check_available()
 Expected output:
 
 ```
-MoE PEFT Factory: NVIDIA CUDA initialized successfully.
+MoE-PEFT: NVIDIA CUDA initialized successfully.
 ```
 
 ## Microsoft Windows
@@ -144,7 +144,7 @@ moe_peft.backend.check_available()
 Expected output:
 
 ```
-MoE PEFT Factory: NVIDIA CUDA initialized successfully.
+MoE-PEFT: NVIDIA CUDA initialized successfully.
 ```
 
 ## Apple macOS
@@ -189,5 +189,5 @@ moe_peft.backend.check_available()
 Expected output:
 
 ```
-MoE PEFT Factory: APPLE MPS initialized successfully.
+MoE-PEFT: APPLE MPS initialized successfully.
 ```

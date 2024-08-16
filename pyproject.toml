@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "moe_peft"
 version = "1.0.0"
-description = "An Efficient Factory to Build Multiple PEFT Adapters"
+description = "An Efficient LLM Fine-Tuning Factory Optimized for MoE PEFT"
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [

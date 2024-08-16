@@ -543,7 +543,7 @@ class SwitchRouterLoss(torch.nn.Module):
         router_logits = _switch_unpack_router_logits(router_outputs)
         z_loss = _switch_router_z_loss_func(router_logits)
         router_probs = F.softmax(router_logits, dim=-1)
-        # recompute expert indexes due to MoE PEFT Factory constraints
+        # recompute expert indexes due to MoE-PEFT constraints
         expert_indexes = _switch_recompute_expert_indices(
             router_probs, self.experts, self.expert_capacity_
         )

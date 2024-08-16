@@ -166,15 +166,13 @@ def avail_tasks():
     print("Available task names:")
     for name in moe_peft.tasks.task_dict.keys():
         print(f"    {name}")
-    print(
-        "These tasks can be trained and evaluated automatically using MoE PEFT Factory."
-    )
+    print("These tasks can be trained and evaluated automatically using MoE-PEFT.")
 
 
 def show_help():
     print(
         """
-    Launcher of MoE PEFT Factory
+    Launcher of MoE-PEFT
     Usage: python launch.py COMMAND [ARGS...]
     Command:
         gen         generate a configuration from template

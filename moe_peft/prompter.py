@@ -5,7 +5,7 @@ from typing import Dict, Optional, Union
 
 prompt_templates = {
     "moe_peft": {
-        "description": "Default Prompt Template Provided by MoE PEFT Factory",
+        "description": "Default Prompt Template Provided by MoE-PEFT",
         "prompt_input": "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Output:\n",
         "prompt_no_input": "### Instruction:\n{instruction}\n\n### Output:\n",
         "response_split": "### Output:",

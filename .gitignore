@@ -162,7 +162,7 @@ cython_debug/
 # IDEs
 .vscode/
 
-# MoE PEFT Factory
+# MoE-PEFT
 __pycache__/
 *.egg-info/
 *.egg
