@@ -6,7 +6,7 @@ import fire
 import gradio as gr
 import torch
 
-import mlora
+import moe_peft
 
 
 class Iteratorize:
@@ -61,7 +61,7 @@ class Iteratorize:
         self.stop_now = True
 
 
-placeholder_text = "Could you provide an introduction to m-LoRA?"
+placeholder_text = "Could you provide an introduction to MoE PEFT Factory?"
 
 
 def main(
@@ -72,26 +72,26 @@ def main(
     load_8bit: bool = False,
     load_4bit: bool = False,
     flash_attn: bool = False,
-    device: str = mlora.backend.default_device_name(),
+    device: str = moe_peft.backend.default_device_name(),
     server_name: str = "0.0.0.0",
     share_gradio: bool = False,
 ):
 
-    model = mlora.LLMModel.from_pretrained(
+    model = moe_peft.LLMModel.from_pretrained(
         base_model,
         device=device,
         attn_impl="flash_attn" if flash_attn else "eager",
         bits=(8 if load_8bit else (4 if load_4bit else None)),
         load_dtype=torch.bfloat16 if load_16bit else torch.float32,
     )
-    tokenizer = mlora.Tokenizer(base_model)
+    tokenizer = moe_peft.Tokenizer(base_model)
 
     if lora_weights:
         model.load_adapter(lora_weights, "default")
     else:
-        model.init_adapter(mlora.AdapterConfig(adapter_name="default"))
+        model.init_adapter(moe_peft.AdapterConfig(adapter_name="default"))
 
-    generation_config = mlora.GenerateConfig(
+    generation_config = moe_peft.GenerateConfig(
         adapter_name="default",
         prompt_template=template,
     )
@@ -131,7 +131,7 @@ def main(
             # Stream the reply 1 token at a time.
 
             def generate_with_callback(callback=None, **kwargs):
-                mlora.generate(stream_callback=callback, **kwargs)
+                moe_peft.generate(stream_callback=callback, **kwargs)
 
             def generate_with_streaming(**kwargs):
                 return Iteratorize(generate_with_callback, kwargs, callback=None)
@@ -142,7 +142,7 @@ def main(
             return  # early return for stream_output
 
         # Without streaming
-        output = mlora.generate(**generate_params)
+        output = moe_peft.generate(**generate_params)
         yield output["default"][0]
 
     gr.Interface(
@@ -179,7 +179,7 @@ def main(
                 label="Output",
             )
         ],
-        title="m-LoRA LLM Evaluator",
+        title="MoE PEFT Factory LLM Evaluator",
         description="Evaluate language models and LoRA weights",  # noqa: E501
     ).queue().launch(server_name=server_name, share=share_gradio)
 

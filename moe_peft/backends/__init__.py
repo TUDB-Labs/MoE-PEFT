@@ -16,7 +16,7 @@ backend_dict = {
 
 
 def _init_backend():
-    env = os.getenv("MLORA_BACKEND_TYPE")
+    env = os.getenv("MOE_PEFT_BACKEND_TYPE")
     if env is not None:
         env = env.upper()
         if env not in backend_dict:

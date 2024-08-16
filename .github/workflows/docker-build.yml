@@ -20,6 +20,6 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
     - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag mikecovlee/mlora:${{ github.event.release.tag_name }}
+      run: docker build . --file Dockerfile --tag mikecovlee/moe_peft:${{ github.event.release.tag_name }}
     - name: Push to the Docker Hub
-      run: docker push mikecovlee/mlora:${{ github.event.release.tag_name }}
+      run: docker push mikecovlee/moe_peft:${{ github.event.release.tag_name }}

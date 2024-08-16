@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers.utils import is_bitsandbytes_available
 
-from mlora.backends import backend
+from moe_peft.backends import backend
 
 from .abstracts import LLMMoeBlock
 from .config import LLMModelInput, LoraConfig
@@ -14,7 +14,7 @@ if is_bitsandbytes_available():
     import bitsandbytes as bnb
     from bitsandbytes.nn import Linear4bit, Linear8bitLt
 else:
-    from mlora.utils import Linear8bitLt, Linear4bit
+    from moe_peft.utils import Linear8bitLt, Linear4bit
 
 from typing import Any, Dict, List, Tuple
 

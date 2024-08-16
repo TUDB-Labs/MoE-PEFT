@@ -6,7 +6,7 @@ import datasets as hf_datasets
 import evaluate as hf_evaluate
 import torch
 
-from mlora.modules import InputData, Prompt
+from moe_peft.modules import InputData, Prompt
 
 
 class BasicMetric:
@@ -23,7 +23,7 @@ class BasicMetric:
 class AutoMetric(BasicMetric):
     def __init__(self, task_name: str) -> None:
         super().__init__()
-        path_prefix = os.getenv("MLORA_METRIC_PATH")
+        path_prefix = os.getenv("MOE_PEFT_METRIC_PATH")
         if path_prefix is None:
             path_prefix = ""
         elif not path_prefix.endswith(os.sep):

@@ -1,7 +1,7 @@
 import fire
 import torch
 
-import mlora
+import moe_peft
 
 
 def inference_callback(cur_pos, outputs):
@@ -22,30 +22,32 @@ def main(
     flash_attn: bool = False,
     max_seq_len: int = None,
     stream: bool = False,
-    device: str = mlora.backend.default_device_name(),
+    device: str = moe_peft.backend.default_device_name(),
 ):
 
-    model = mlora.LLMModel.from_pretrained(
+    model = moe_peft.LLMModel.from_pretrained(
         base_model,
         device=device,
         attn_impl="flash_attn" if flash_attn else "eager",
         bits=(8 if load_8bit else (4 if load_4bit else None)),
         load_dtype=torch.bfloat16 if load_16bit else torch.float32,
     )
-    tokenizer = mlora.Tokenizer(base_model)
+    tokenizer = moe_peft.Tokenizer(base_model)
 
     if lora_weights:
         adapter_name = model.load_adapter(lora_weights)
     else:
-        adapter_name = model.init_adapter(mlora.AdapterConfig(adapter_name="default"))
+        adapter_name = model.init_adapter(
+            moe_peft.AdapterConfig(adapter_name="default")
+        )
 
-    generate_paramas = mlora.GenerateConfig(
+    generate_paramas = moe_peft.GenerateConfig(
         adapter_name=adapter_name,
         prompt_template=template,
         prompts=[(instruction, input)],
     )
 
-    output = mlora.generate(
+    output = moe_peft.generate(
         model,
         tokenizer,
         [generate_paramas],

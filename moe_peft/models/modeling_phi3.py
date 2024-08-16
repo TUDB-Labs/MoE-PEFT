@@ -8,8 +8,8 @@ from transformers.models.phi3 import modeling_phi3
 from transformers.models.phi3.modeling_phi3 import apply_rotary_pos_emb, repeat_kv
 from transformers.utils import is_flash_attn_2_available
 
-from mlora.backends import backend
-from mlora.modules import (
+from moe_peft.backends import backend
+from moe_peft.modules import (
     FeedForward,
     Linear,
     LLMAttention,
@@ -23,8 +23,8 @@ from mlora.modules import (
     flash_attention_forward,
     prepare_4d_causal_attention_mask,
 )
-from mlora.modules.mix_lora import _slice_tensor
-from mlora.utils import copy_parameters
+from moe_peft.modules.mix_lora import _slice_tensor
+from moe_peft.utils import copy_parameters
 
 from .modeling_gemma2 import Gemma2RotaryEmbedding as Phi3RotaryEmbedding
 from .modeling_llama import LlamaEmbedding as Phi3Embedding

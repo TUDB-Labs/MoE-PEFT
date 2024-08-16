@@ -10,13 +10,13 @@ work_path = os.path.dirname(os.path.abspath(__file__))
 
 def compose_command(
     base_model: str,
-    config: str = "mlora.json",
+    config: str = "moe_peft.json",
     inference: bool = False,
     evaluate: bool = False,
     load_adapter: bool = False,
     random_seed: int = 42,
     cuda_device: int = None,
-    log_file: str = "mlora.log",
+    log_file: str = "moe_peft.log",
     overwrite: bool = False,
     attn_impl: str = None,
     sliding_window: bool = False,
@@ -27,7 +27,7 @@ def compose_command(
 ):
     assert quantize in (None, "4bit", "8bit")
     assert dtype in ("fp32", "fp16", "bf16")
-    command = "python mlora.py"
+    command = "python moe_peft.py"
     if cuda_device is not None:
         command = f"CUDA_VISIBLE_DEVICES={cuda_device} " + command
     command += f" --base_model {base_model}"
@@ -68,7 +68,7 @@ def gen_config(
     tasks: str,
     # optional
     adapter_name: str = None,
-    file_name: str = "mlora.json",
+    file_name: str = "moe_peft.json",
     data_path: str = None,
     multi_task: bool = False,
     append: bool = False,
@@ -89,7 +89,7 @@ def gen_config(
     use_rslora: bool = None,
     group_by_length: bool = None,
 ):
-    import mlora
+    import moe_peft
 
     template = f"{work_path}{os.sep}{file_path}{os.sep}{template}.json"
     config_dir = f"{work_path}{os.sep}{file_name}"
@@ -123,7 +123,7 @@ def gen_config(
             if multi_task:
                 lora_config["name"] = f"multi_task_{index}"
                 lora_config["task_name"] = task_name
-            elif task_name not in mlora.tasks.task_dict:
+            elif task_name not in moe_peft.tasks.task_dict:
                 assert os.path.exists(task_name), f"File '{task_name}' not exist."
                 lora_config["name"] = f"casual_{index}"
                 lora_config["task_name"] = "casual"
@@ -161,18 +161,20 @@ def gen_config(
 
 
 def avail_tasks():
-    import mlora
+    import moe_peft
 
     print("Available task names:")
-    for name in mlora.tasks.task_dict.keys():
+    for name in moe_peft.tasks.task_dict.keys():
         print(f"    {name}")
-    print("These tasks can be trained and evaluated automatically using m-LoRA.")
+    print(
+        "These tasks can be trained and evaluated automatically using MoE PEFT Factory."
+    )
 
 
 def show_help():
     print(
         """
-    Launcher of m-LoRA
+    Launcher of MoE PEFT Factory
     Usage: python launch.py COMMAND [ARGS...]
     Command:
         gen         generate a configuration from template
@@ -184,7 +186,7 @@ def show_help():
         --template          lora, mixlora, etc.
         --tasks             task names separate by ';'
         --adapter_name      default is task name
-        --file_name         default is 'mlora.json'
+        --file_name         default is 'moe_peft.json'
         --data_path         path to input data
         --multi_task        multi-task training
         --append            append to existed config
@@ -204,11 +206,11 @@ def show_help():
 
     Arguments of run:
         --base_model     model name or path
-        --config         [mlora.json]
+        --config         [moe_peft.json]
         --load_adapter   [false]
         --random_seed    [42]
         --cuda_device    [0]
-        --log_file       [mlora.log]
+        --log_file       [moe_peft.log]
         --overwrite      [false]
         --attn_impl      [eager]
         --sliding_window [false]

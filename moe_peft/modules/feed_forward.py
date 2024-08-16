@@ -2,7 +2,7 @@ from typing import Dict, List, Tuple
 
 import torch
 
-from mlora.backends import backend
+from moe_peft.backends import backend
 
 from .abstracts import LLMFeedForward, LLMMoeBlock
 from .config import LLMModelInput

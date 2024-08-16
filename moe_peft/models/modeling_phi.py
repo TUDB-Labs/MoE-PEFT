@@ -13,8 +13,8 @@ from transformers.models.phi.modeling_phi import (
 )
 from transformers.utils import is_flash_attn_2_available
 
-from mlora.backends import backend
-from mlora.modules import (
+from moe_peft.backends import backend
+from moe_peft.modules import (
     FeedForward,
     Linear,
     LLMAttention,
@@ -28,8 +28,8 @@ from mlora.modules import (
     flash_attention_forward,
     prepare_4d_causal_attention_mask,
 )
-from mlora.modules.mix_lora import _slice_tensor
-from mlora.utils import copy_parameters
+from moe_peft.modules.mix_lora import _slice_tensor
+from moe_peft.utils import copy_parameters
 
 
 @dataclass

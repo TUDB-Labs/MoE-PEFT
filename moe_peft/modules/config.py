@@ -68,7 +68,7 @@ class LLMBatchConfig:
 
 
 def _efficient_operator_factory():
-    efficient_operator = os.getenv("MLORA_EVALUATE_MODE") is None
+    efficient_operator = os.getenv("MOE_PEFT_EVALUATE_MODE") is None
     return efficient_operator
 
 

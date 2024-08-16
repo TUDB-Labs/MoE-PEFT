@@ -7,10 +7,10 @@ from transformers.models.gemma2 import modeling_gemma2
 from transformers.models.gemma2.modeling_gemma2 import apply_rotary_pos_emb, repeat_kv
 from transformers.utils import is_flash_attn_2_available
 
-from mlora.backends import backend
-from mlora.models.modeling_gemma import GemmaEmbedding, GemmaRMSNorm
-from mlora.models.modeling_llama import LlamaMLP
-from mlora.modules import (
+from moe_peft.backends import backend
+from moe_peft.models.modeling_gemma import GemmaEmbedding, GemmaRMSNorm
+from moe_peft.models.modeling_llama import LlamaMLP
+from moe_peft.modules import (
     FeedForward,
     Linear,
     LLMAttention,
@@ -22,7 +22,7 @@ from mlora.modules import (
     flash_attention_forward,
     prepare_4d_causal_attention_mask,
 )
-from mlora.utils import copy_parameters, is_package_available
+from moe_peft.utils import copy_parameters, is_package_available
 
 
 @dataclass

@@ -9,9 +9,9 @@ import torch
 from huggingface_hub import snapshot_download
 from transformers import AutoModelForCausalLM
 
-from mlora.backends import backend
-from mlora.models import from_pretrained
-from mlora.modules import (
+from moe_peft.backends import backend
+from moe_peft.models import from_pretrained
+from moe_peft.modules import (
     CHECKPOINT_CLASSES,
     AdapterConfig,
     Linear,
@@ -31,13 +31,13 @@ from mlora.modules import (
     moe_layer_factory,
     router_loss_factory,
 )
-from mlora.tasks import SequenceClassificationTask, task_dict
-from mlora.utils import is_package_available
+from moe_peft.tasks import SequenceClassificationTask, task_dict
+from moe_peft.utils import is_package_available
 
 if is_package_available("bitsandbytes"):
     from transformers import BitsAndBytesConfig
 else:
-    from mlora.utils import BitsAndBytesConfig
+    from moe_peft.utils import BitsAndBytesConfig
 
 
 class CasualOutputLayer(LLMOutput):

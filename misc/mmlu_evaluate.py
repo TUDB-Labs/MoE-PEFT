@@ -7,7 +7,7 @@ import datasets
 import fire
 import torch
 
-import mlora
+import moe_peft
 
 choices_map = ["A", "B", "C", "D"]
 
@@ -35,7 +35,7 @@ def format_prompt(data_point, with_answer=True):
 
 
 def prepare_data(
-    tokenizer: mlora.Tokenizer,
+    tokenizer: moe_peft.Tokenizer,
     subject: str,
     dev_data: datasets.Dataset,
     test_data: datasets.Dataset,
@@ -93,8 +93,8 @@ def prepare_data(
 @torch.inference_mode()
 def evaluate(
     subject: str,
-    tokenizer: mlora.Tokenizer,
-    model: mlora.LLMModel,
+    tokenizer: moe_peft.Tokenizer,
+    model: moe_peft.LLMModel,
     adapter_names: List[str],
     batch_size: int = 2,
     max_seq_len: int = 2048,
@@ -134,7 +134,7 @@ def evaluate(
         batch_start_idx = 0
         for name in adapter_names:
             batch_data_config.append(
-                mlora.LLMBatchConfig(
+                moe_peft.LLMBatchConfig(
                     adapter_name_=name,
                     batch_start_idx_=batch_start_idx,
                     batch_end_idx_=batch_start_idx + bsz,
@@ -142,7 +142,7 @@ def evaluate(
             )
             batch_start_idx += bsz
 
-        input_args = mlora.LLMModelInput(
+        input_args = moe_peft.LLMModelInput(
             batch_configs_=batch_data_config,
             batch_tokens_=batch_tokens[start_pos:end_pos] * len(adapter_names),
             batch_masks_=atten_masks[start_pos:end_pos] * len(adapter_names),
@@ -263,17 +263,17 @@ def do_evaluate(
     model_dtype: str,
     adapter_names: List[str],
     batch_size: int = 2,
-    device: str = mlora.backend.default_device_name(),
+    device: str = moe_peft.backend.default_device_name(),
     output: str = "mmlu_scores.csv",
 ):
-    tokenizer = mlora.Tokenizer(model_name)
-    model = mlora.LLMModel.from_pretrained(
+    tokenizer = moe_peft.Tokenizer(model_name)
+    model = moe_peft.LLMModel.from_pretrained(
         model_name, device=device, **model_dtypes[model_dtype]
     )
     for name in adapter_names:
         logging.info(f"Loading adapter {name}")
         if name == "default":
-            model.init_adapter(mlora.AdapterConfig(adapter_name=name))
+            model.init_adapter(moe_peft.AdapterConfig(adapter_name=name))
         else:
             model.load_adapter(name)
 
@@ -301,9 +301,9 @@ def do_evaluate(
 
 
 def main(config: str):
-    mlora.backend.manual_seed(66)
-    mlora.setup_logging("INFO")
-    if not mlora.backend.check_available():
+    moe_peft.backend.manual_seed(66)
+    moe_peft.setup_logging("INFO")
+    if not moe_peft.backend.check_available():
         exit(-1)
     with open(config, "r", encoding="utf8") as fp:
         mmlu_config = json.load(fp)

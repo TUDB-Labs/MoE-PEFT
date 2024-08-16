@@ -162,16 +162,16 @@ cython_debug/
 # IDEs
 .vscode/
 
-# m-LoRA
+# MoE PEFT Factory
 __pycache__/
 *.egg-info/
 *.egg
-mlora.json
-mlora_train_*.json
+moe_peft.json
+moe_peft_train_*.json
 
 # macOS junk files
 .DS_Store
 
-# LoRA adapters
+# PEFT adapters
 adapter_model.bin
 adapter_config.json

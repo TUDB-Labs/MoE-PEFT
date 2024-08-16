@@ -1,4 +1,4 @@
-# Install m-LoRA
+# Install MoE PEFT Factory
 
 ## Table of Contents
 
@@ -20,10 +20,10 @@
 ### Steps
 
 ```bash
-docker run --gpus all -it --rm mikecovlee/mlora
+docker run --gpus all -it --rm mikecovlee/moe_peft
 ```
 
-You can check all available tags from: [mikecovlee/mlora/tags](https://hub.docker.com/r/mikecovlee/mlora/tags). Currently, we only provide a Linux image for the x86_64 (amd64) architecture.
+You can check all available tags from: [mikecovlee/moe_peft/tags](https://hub.docker.com/r/mikecovlee/moe_peft/tags). Currently, we only provide a Linux image for the x86_64 (amd64) architecture.
 
 ## Verification
 
@@ -36,15 +36,15 @@ python
 then enter the following code:
 
 ```python
-import mlora
-mlora.setup_logging("INFO")
-mlora.backend.check_available()
+import moe_peft
+moe_peft.setup_logging("INFO")
+moe_peft.backend.check_available()
 ```
 
 Expected output:
 
 ```
-m-LoRA: NVIDIA CUDA initialized successfully.
+MoE PEFT Factory: NVIDIA CUDA initialized successfully.
 ```
 
 ## Linux (Ubuntu, Debian, Fedora, etc.)
@@ -62,11 +62,11 @@ m-LoRA: NVIDIA CUDA initialized successfully.
 
 ```bash
 # Clone Repository
-git clone https://github.com/mikecovlee/mLoRA
-cd mlora
+git clone https://github.com/TUDB-Labs/MoE-PEFT
+cd moe_peft
 # Optional but recommended
-conda create -n mlora python=3.11
-conda activate mlora
+conda create -n moe_peft python=3.11
+conda activate moe_peft
 # Install requirements
 pip3 install -r requirements.txt --upgrade
 # Install extra requirements
@@ -86,15 +86,15 @@ python
 then enter the following code:
 
 ```python
-import mlora
-mlora.setup_logging("INFO")
-mlora.backend.check_available()
+import moe_peft
+moe_peft.setup_logging("INFO")
+moe_peft.backend.check_available()
 ```
 
 Expected output:
 
 ```
-m-LoRA: NVIDIA CUDA initialized successfully.
+MoE PEFT Factory: NVIDIA CUDA initialized successfully.
 ```
 
 ## Microsoft Windows
@@ -113,11 +113,11 @@ m-LoRA: NVIDIA CUDA initialized successfully.
 
 ```bash
 # Clone Repository
-git clone https://github.com/mikecovlee/mLoRA
-cd mlora
+git clone https://github.com/TUDB-Labs/MoE-PEFT
+cd moe_peft
 # Optional but recommended
-conda create -n mlora python=3.11
-conda activate mlora
+conda create -n moe_peft python=3.11
+conda activate moe_peft
 # Install requirements (CUDA 12.1)
 pip3 install torch==2.3.1 --index-url https://download.pytorch.org/whl/cu121
 pip3 install -r requirements.txt --upgrade
@@ -136,15 +136,15 @@ python
 then enter the following code:
 
 ```python
-import mlora
-mlora.setup_logging("INFO")
-mlora.backend.check_available()
+import moe_peft
+moe_peft.setup_logging("INFO")
+moe_peft.backend.check_available()
 ```
 
 Expected output:
 
 ```
-m-LoRA: NVIDIA CUDA initialized successfully.
+MoE PEFT Factory: NVIDIA CUDA initialized successfully.
 ```
 
 ## Apple macOS
@@ -161,11 +161,11 @@ m-LoRA: NVIDIA CUDA initialized successfully.
 
 ```bash
 # Clone Repository
-git clone https://github.com/mikecovlee/mLoRA
-cd mlora
+git clone https://github.com/TUDB-Labs/MoE-PEFT
+cd moe_peft
 # Optional but recommended
-conda create -n mlora python=3.11
-conda activate mlora
+conda create -n moe_peft python=3.11
+conda activate moe_peft
 # Install requirements
 pip3 install -r requirements.txt --upgrade
 ```
@@ -181,13 +181,13 @@ python
 then enter the following code:
 
 ```python
-import mlora
-mlora.setup_logging("INFO")
-mlora.backend.check_available()
+import moe_peft
+moe_peft.setup_logging("INFO")
+moe_peft.backend.check_available()
 ```
 
 Expected output:
 
 ```
-m-LoRA: APPLE MPS initialized successfully.
+MoE PEFT Factory: APPLE MPS initialized successfully.
 ```

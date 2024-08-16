@@ -26,9 +26,9 @@ jobs:
         pip3 install black isort flake8 pytest
     - name: Code lint
       run: |
-        black mlora
-        isort mlora --profile black
-        flake8 mlora --show-source --statistics --max-line-length=128 --max-complexity 15 --ignore=E203,W503,E722
+        black moe_peft
+        isort moe_peft --profile black
+        flake8 moe_peft --show-source --statistics --max-line-length=128 --max-complexity 15 --ignore=E203,W503,E722
     - name: Run tests
       run: |
         pytest

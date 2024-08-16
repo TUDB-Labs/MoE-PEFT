@@ -5,11 +5,11 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 
-from mlora.backends import backend
-from mlora.model import LLMModel
-from mlora.modules import LLMBatchConfig, LLMModelInput, Tokens, cache_factory
-from mlora.prompter import Prompter
-from mlora.tokenizer import Tokenizer
+from moe_peft.backends import backend
+from moe_peft.model import LLMModel
+from moe_peft.modules import LLMBatchConfig, LLMModelInput, Tokens, cache_factory
+from moe_peft.prompter import Prompter
+from moe_peft.tokenizer import Tokenizer
 
 
 @dataclass

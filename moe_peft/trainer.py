@@ -366,7 +366,7 @@ def train(
 
     if len(evaluate_results) > 0:
         if save_dir is not None:
-            save_file = f"{save_dir}{os.sep}mlora_train_{int(time.time())}.json"
+            save_file = f"{save_dir}{os.sep}moe_peft_train_{int(time.time())}.json"
             with open(save_file, "w") as f:
                 json.dump(evaluate_results, f, indent=4)
             logging.info(f"saving evaluation result to {save_file}")

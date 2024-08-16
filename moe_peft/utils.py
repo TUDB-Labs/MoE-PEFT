@@ -19,7 +19,7 @@ def setup_logging(log_level: str = "WARN", log_file: str = None):
         log_handlers.append(logging.FileHandler(log_file))
 
     logging.basicConfig(
-        format="[%(asctime)s] m-LoRA: %(message)s",
+        format="[%(asctime)s] MoE-PEFT: %(message)s",
         level=log_level,
         handlers=log_handlers,
         force=True,

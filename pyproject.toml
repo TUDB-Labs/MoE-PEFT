@@ -3,9 +3,9 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mlora"
-version = "0.5.2"
-description = "An Efficient Factory to Build Multiple LoRA Adapters"
+name = "moe_peft"
+version = "1.0.0"
+description = "An Efficient Factory to Build Multiple PEFT Adapters"
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
@@ -26,8 +26,8 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/mikecovlee/mLoRA"
-"Bug Tracker" = "https://github.com/mikecovlee/mLoRA/issues"
+"Homepage" = "https://github.com/TUDB-Labs/MoE-PEFT"
+"Bug Tracker" = "https://github.com/TUDB-Labs/MoE-PEFT/issues"
 
 [tool.setuptools.packages.find]
-include = ["mlora*"]
+include = ["moe_peft*"]

@@ -29,8 +29,8 @@ RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
 ENV PYENV_ROOT=/root/.pyenv
 ENV PATH="$PYENV_ROOT/bin/:$PATH"
 
-RUN /usr/bin/echo -e '#!/bin/bash\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"\ncd /mLoRA\nbash' | tee /opt/start.sh \
-    && chmod +x /opt/start.sh \
+RUN /usr/bin/echo -e '#!/bin/bash\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"\ncd /moe_peft\nbash' | tee /opt/init.sh \
+    && chmod +x /opt/init.sh \
     && /usr/bin/echo -e 'export PYENV_ROOT=/root/.pyenv' >> ~/.bashrc \
     && /usr/bin/echo -e 'export PATH=/root/.pyenv/bin:$PATH' >> ~/.bashrc \
     && /usr/bin/echo -e 'eval "$(pyenv init -)"' >> ~/.bashrc \
@@ -44,12 +44,12 @@ RUN /usr/bin/echo -e '#!/bin/bash\neval "$(pyenv init -)"\neval "$(pyenv virtual
 RUN . ~/.bashrc \
     && pyenv install $PYTHON_VERSION \
     && pyenv global $PYTHON_VERSION \
-    && git clone https://github.com/mikecovlee/mLoRA /mLoRA \
-    && cd /mLoRA \
-    && pyenv virtualenv $PYTHON_VERSION mlora \
-    && pyenv local mlora \
+    && git clone https://github.com/TUDB-Labs/MoE-PEFT /moe_peft \
+    && cd /moe_peft \
+    && pyenv virtualenv $PYTHON_VERSION moe_peft \
+    && pyenv local moe_peft \
     && pip install -r ./requirements.txt --upgrade --no-compile --no-cache-dir
 
-WORKDIR /mLoRA
+WORKDIR /moe_peft
 
-CMD ["/bin/bash", "/opt/start.sh"]
+CMD ["/bin/bash", "/opt/init.sh"]

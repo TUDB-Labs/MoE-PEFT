@@ -1,12 +1,12 @@
-# m-LoRA: An Efficient LLM Fine-tuning Framework
-[![](https://github.com/mikecovlee/mLoRA/actions/workflows/python-test.yml/badge.svg)](https://github.com/mikecovlee/mLoRA/actions/workflows/python-test.yml)
-[![](https://img.shields.io/github/stars/mikecovlee/mLoRA?logo=GitHub&style=flat)](https://github.com/mikecovlee/mLoRA/stargazers)
-[![](https://img.shields.io/github/v/release/mikecovlee/mLoRA?logo=Github)](https://github.com/mikecovlee/mLoRA/releases/latest)
-[![](https://img.shields.io/pypi/v/mlora?logo=pypi)](https://pypi.org/project/mlora/)
-[![](https://img.shields.io/docker/v/mikecovlee/mlora?logo=Docker&label=docker)](https://hub.docker.com/r/mikecovlee/mlora/tags)
-[![](https://img.shields.io/github/license/mikecovlee/mLoRA)](http://www.apache.org/licenses/LICENSE-2.0)
+# MoE PEFT Factory: An Efficient LLM Fine-tuning Framework
+[![](https://github.com/TUDB-Labs/MoE-PEFT/actions/workflows/python-test.yml/badge.svg)](https://github.com/TUDB-Labs/MoE-PEFT/actions/workflows/python-test.yml)
+[![](https://img.shields.io/github/stars/TUDB-Labs/MoE-PEFT?logo=GitHub&style=flat)](https://github.com/TUDB-Labs/MoE-PEFT/stargazers)
+[![](https://img.shields.io/github/v/release/TUDB-Labs/MoE-PEFT?logo=Github)](https://github.com/TUDB-Labs/MoE-PEFT/releases/latest)
+[![](https://img.shields.io/pypi/v/moe_peft?logo=pypi)](https://pypi.org/project/moe_peft/)
+[![](https://img.shields.io/docker/v/mikecovlee/moe_peft?logo=Docker&label=docker)](https://hub.docker.com/r/mikecovlee/moe_peft/tags)
+[![](https://img.shields.io/github/license/TUDB-Labs/MoE-PEFT)](http://www.apache.org/licenses/LICENSE-2.0)
 
-m-LoRA (short for Multi-LoRA) is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for high-throughput fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others. Key features of mLoRA include:
+MoE PEFT Factory is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for high-throughput fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others. Key features of MoE PEFT Factory include:
 
 - Concurrent fine-tuning of multiple adapters with a shared pre-trained model.
 
@@ -14,11 +14,7 @@ m-LoRA (short for Multi-LoRA) is an open-source LLMOps framework developed by th
 
 - Mo-LoRA (Mixture of LoRAs) optimization, mainly for [MixLoRA](https://github.com/TUDB-Labs/MixLoRA).
 
-You can try m-LoRA with [Google Colab](https://githubtocolab.com/mikecovlee/mLoRA/blob/main/misc/finetune-demo.ipynb) before local installation.
-
-## Note from the maintainer of this repository
-
-This is an actively developing fork of the official m-LoRA repository, focusing on the PEFT algorithm and its related improvements. It is maintained by the authors of m-LoRA. Currently, this fork **does not support pipeline parallelism** and can only utilize a single compute device, such as a GPU or NPU, for each m-LoRA process. Please note that the functions, interfaces, and performance of this fork differ from those of the original m-LoRA. Compatibility is not guaranteed. For production use, please prefer the [original m-LoRA](https://github.com/TUDB-Labs/mLoRA).
+You can try MoE PEFT Factory with [Google Colab](https://githubtocolab.com/TUDB-Labs/MoE-PEFT/blob/main/misc/finetune-demo.ipynb) before local installation.
 
 ## Supported Platform
 
@@ -29,7 +25,7 @@ This is an actively developing fork of the official m-LoRA repository, focusing 
 | macOS   | MPS     | FP32, FP16, BF16       | &cross;       | &cross;         |
 | All     | CPU     | FP32, FP16, BF16       | &cross;       | &cross;         |
 
-You can use the `MLORA_BACKEND_TYPE` environment variable to force m-LoRA to use a specific backend. For example, if you want m-LoRA to run only on CPU, you can set `MLORA_BACKEND_TYPE=CPU` before importing `mlora`.
+You can use the `MOE_PEFT_BACKEND_TYPE` environment variable to force MoE PEFT Factory to use a specific backend. For example, if you want MoE PEFT Factory to run only on CPU, you can set `MOE_PEFT_BACKEND_TYPE=CPU` before importing `moe_peft`.
 
 ## Supported Pre-trained Models
 
@@ -66,7 +62,7 @@ You can use the `MLORA_BACKEND_TYPE` environment variable to force m-LoRA to use
 *: Arguments of configuration file
 
 ### Notice of PEFT supports
-1. m-LoRA supports specific optimized operators for these PEFT methods, which can effectively improve the computing performance during training, evaluation and inference. However, these operators may cause a certain degree of accuracy loss (less than 5%). You can disable the optimized operators by defining the `MLORA_EVALUATE_MODE` environment variable in advance.
+1. MoE PEFT Factory supports specific optimized operators for these PEFT methods, which can effectively improve the computing performance during training, evaluation and inference. However, these operators may cause a certain degree of accuracy loss (less than 5%). You can disable the optimized operators by defining the `MOE_PEFT_EVALUATE_MODE` environment variable in advance.
 2. Auxiliary Loss is not currently supported for Mo-LoRA (Mixture of LoRAs) methods other than MixLoRA.
 3. You can check detailed arguments of MixLoRA in [TUDB-Labs/MixLoRA](https://github.com/TUDB-Labs/MixLoRA).
 
@@ -78,9 +74,9 @@ You can use the `MLORA_BACKEND_TYPE` environment variable to force m-LoRA to use
 | &check; | [Flash Attention 2](https://arxiv.org/abs/2307.08691)        | `"flash_attn"` | `--attn_impl flash_attn` |
 | &check; | [Sliding Window Attention](https://arxiv.org/abs/2004.05150) | -              | `--sliding_window`       |
 
-*: Arguments of `mlora.py`
+*: Arguments of `moe_peft.py`
 
-m-LoRA only supports scaled-dot product attention (eager) by default. Additional requirements are necessary for flash attention.
+MoE PEFT Factory only supports scaled-dot product attention (eager) by default. Additional requirements are necessary for flash attention.
 
 For flash attention, manual installation of the following dependencies is required:
 
@@ -102,11 +98,11 @@ If any attention method is not specified, flash attention is used if available.
 | &check; | 8bit Quantize         | `--load_8bit` |
 | &check; | 4bit Quantize         | `--load_4bit` |
 
-*: Arguments of `mlora.py`
+*: Arguments of `moe_peft.py`
 
-m-LoRA offers support for various model accuracy and quantization methods. By default, m-LoRA utilizes full precision (Float32), but users can opt for half precision (Float16) using `--fp16` or BrainFloat16 using `--bf16`. Enabling half precision reduces the model size by half, and for further reduction, quantization methods can be employed.
+MoE PEFT Factory offers support for various model accuracy and quantization methods. By default, MoE PEFT Factory utilizes full precision (Float32), but users can opt for half precision (Float16) using `--fp16` or BrainFloat16 using `--bf16`. Enabling half precision reduces the model size by half, and for further reduction, quantization methods can be employed.
 
-Quantization can be activated using `--load_4bit` for 4-bit quantization or `--load_8bit` for 8-bit quantization. However, when only quantization is enabled, m-LoRA utilizes Float32 for calculations. To achieve memory savings during training, users can combine quantization and half-precision modes.
+Quantization can be activated using `--load_4bit` for 4-bit quantization or `--load_8bit` for 8-bit quantization. However, when only quantization is enabled, MoE PEFT Factory utilizes Float32 for calculations. To achieve memory savings during training, users can combine quantization and half-precision modes.
 
 To enable quantization support, please manually install `bitsandbytes`:
 
@@ -114,21 +110,21 @@ To enable quantization support, please manually install `bitsandbytes`:
 pip3 install bitsandbytes==0.43.1
 ```
 
-It's crucial to note that regardless of the settings, **LoRA weights are always calculated and stored at full precision**. For maintaining calculation accuracy, m-LoRA framework mandates the use of full precision for calculations when accuracy is imperative.
+It's crucial to note that regardless of the settings, **LoRA weights are always calculated and stored at full precision**. For maintaining calculation accuracy, MoE PEFT Factory framework mandates the use of full precision for calculations when accuracy is imperative.
 
 For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can be utilized to enable full-precision calculation acceleration.
 
 ## Offline Configuration
 
-m-LoRA relies on **HuggingFace Hub** to download necessary models, datasets, etc. If you cannot access the Internet or need to deploy m-LoRA in an offline environment, please refer to the following guide.
+MoE PEFT Factory relies on **HuggingFace Hub** to download necessary models, datasets, etc. If you cannot access the Internet or need to deploy MoE PEFT Factory in an offline environment, please refer to the following guide.
 
 1. Use `git-lfs` manually downloads models and datasets from [HuggingFace Hub](https://huggingface.co).
 2. Set `--data_path` to the local path to datasets when executing `launch.py gen`.
 3. Clone the [evaluate](https://github.com/huggingface/evaluate) code repository locally.
-4. Set environment variable `MLORA_METRIC_PATH` to the local path to `metrics` folder of evaluate code repository.
+4. Set environment variable `MOE_PEFT_METRIC_PATH` to the local path to `metrics` folder of evaluate code repository.
 5. Set `--base_model` to the local path to models when executing `launch.py run`.
 
-Example of (4): `export MLORA_METRIC_PATH=/path-to-your-git-repo/evaluate/metrics`
+Example of (4): `export MOE_PEFT_METRIC_PATH=/path-to-your-git-repo/evaluate/metrics`
 
 ## Known issues
 
@@ -139,11 +135,11 @@ Example of (4): `export MLORA_METRIC_PATH=/path-to-your-git-repo/evaluate/metric
 
 ## Installation
 
-Please refer to [m-LoRA Install Guide](./Install.md).
+Please refer to [MoE PEFT Factory Install Guide](./Install.md).
 
 ## Quickstart
 
-You can conveniently utilize m-LoRA via `launch.py`. The following example demonstrates a streamlined approach to training a dummy model with m-LoRA.
+You can conveniently utilize MoE PEFT Factory via `launch.py`. The following example demonstrates a streamlined approach to training a dummy model with MoE PEFT Factory.
 
 ```bash
 # Generating configuration
@@ -165,9 +161,9 @@ For further detailed usage information, please refer to the `help` command:
 python launch.py help
 ```
 
-## m-LoRA
+## MoE PEFT Factory
 
-The `mlora.py` code is a starting point for finetuning on various datasets.
+The `moe_peft.py` code is a starting point for finetuning on various datasets.
 
 Basic command for finetuning a baseline model on the [Alpaca Cleaned](https://github.com/gururise/AlpacaDataCleaned) dataset:
 ```bash
@@ -176,9 +172,9 @@ python launch.py gen \
   --template lora \
   --tasks yahma/alpaca-cleaned
 
-python mlora.py \
+python moe_peft.py \
   --base_model meta-llama/Llama-2-7b-hf \
-  --config mlora.json \
+  --config moe_peft.json \
   --bf16
 ```
 
@@ -186,7 +182,7 @@ You can check the template finetune configuration in [templates](./templates/) f
 
 For further detailed usage information, please use `--help` option:
 ```bash
-python mlora.py --help
+python moe_peft.py --help
 ```
 
 ## Use Docker
@@ -196,12 +192,12 @@ Firstly, ensure that you have installed Docker Engine and NVIDIA Container Toolk
 After that, you can launch the container using the following typical command:
 
 ```
-docker run --gpus all -it --rm mikecovlee/mlora
+docker run --gpus all -it --rm mikecovlee/moe_peft
 ```
 
-You can check all available tags from: [mikecovlee/mlora/tags](https://hub.docker.com/r/mikecovlee/mlora/tags)
+You can check all available tags from: [mikecovlee/moe_peft/tags](https://hub.docker.com/r/mikecovlee/moe_peft/tags)
 
-Please note that this container only provides a proper environment to run m-LoRA. The codes of m-LoRA are not included.
+Please note that this container only provides a proper environment to run MoE PEFT Factory. The codes of MoE PEFT Factory are not included.
 
 ## Copyright
 Copyright © 2023-2024 IDs Lab, Sichuan University

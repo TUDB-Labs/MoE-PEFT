@@ -8,10 +8,10 @@ from typing import Dict, List, Tuple, Union
 import torch
 from transformers.utils import is_flash_attn_2_available
 
-import mlora
+import moe_peft
 
 # Command Line Arguments
-parser = argparse.ArgumentParser(description="m-LoRA main program")
+parser = argparse.ArgumentParser(description="MoE PEFT Factory main program")
 parser.add_argument(
     "--base_model", type=str, required=True, help="Path to or name of base model"
 )
@@ -117,9 +117,9 @@ def query_yes_no(question, default="no"):
             sys.stdout.write("Please respond with 'yes' or 'no' " "(or 'y' or 'n').\n")
 
 
-def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
+def load_base_model() -> Tuple[moe_peft.Tokenizer, moe_peft.LLMModel]:
     logging.info("Initializing pre-trained model.")
-    model = mlora.LLMModel.from_pretrained(
+    model = moe_peft.LLMModel.from_pretrained(
         name_or_path=args.base_model,
         device=args.device,
         attn_impl=args.attn_impl,
@@ -132,15 +132,15 @@ def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
         ),
     )
 
-    tokenizer = mlora.Tokenizer(args.base_model)
+    tokenizer = moe_peft.Tokenizer(args.base_model)
 
     return tokenizer, model
 
 
 def init_adapter_config(
     config: Dict[str, any],
-    llm_model: mlora.LLMModel,
-) -> List[Union[mlora.GenerateConfig, mlora.TrainConfig]]:
+    llm_model: moe_peft.LLMModel,
+) -> List[Union[moe_peft.GenerateConfig, moe_peft.TrainConfig]]:
     config_list = []
 
     if config["cutoff_len"] == -1:
@@ -164,17 +164,17 @@ def init_adapter_config(
         if args.load_adapter:
             llm_model.load_adapter(adapter_path, adapter_name)
         else:
-            llm_model.init_adapter(mlora.lora_config_factory(lora_config))
+            llm_model.init_adapter(moe_peft.lora_config_factory(lora_config))
 
         if args.inference:
-            config_class = mlora.GenerateConfig(adapter_name=adapter_name)
+            config_class = moe_peft.GenerateConfig(adapter_name=adapter_name)
             if not args.disable_prompter:
                 config_class.prompt_template = lora_config.get("prompt", None)
             config_list.append(config_class)
         elif args.evaluate:
-            config_list.extend(mlora.EvaluateConfig.from_config(lora_config))
+            config_list.extend(moe_peft.EvaluateConfig.from_config(lora_config))
         else:
-            config_list.append(mlora.TrainConfig.from_config(lora_config))
+            config_list.append(moe_peft.TrainConfig.from_config(lora_config))
 
         if args.verbose:
             logging.info(config_list[-1].__dict__)
@@ -189,9 +189,9 @@ def inference_callback(cur_pos, outputs):
 
 
 def inference(
-    model: mlora.LLMModel,
-    tokenizer: mlora.Tokenizer,
-    configs: List[mlora.GenerateConfig],
+    model: moe_peft.LLMModel,
+    tokenizer: moe_peft.Tokenizer,
+    configs: List[moe_peft.GenerateConfig],
     concurrent_jobs: int,
 ):
     while True:
@@ -201,7 +201,7 @@ def inference(
         for config in configs:
             config.prompts = [input_raw]
         callback = None if args.disable_log else inference_callback
-        outputs = mlora.generate(
+        outputs = moe_peft.generate(
             model,
             tokenizer,
             configs,
@@ -230,17 +230,17 @@ if __name__ == "__main__":
     else:
         inference_mode = False
 
-    mlora.setup_logging("INFO", args.log_file)
+    moe_peft.setup_logging("INFO", args.log_file)
 
-    mlora_backend = mlora.backend
+    moe_peft_backend = moe_peft.backend
 
-    if not mlora_backend.check_available():
+    if not moe_peft_backend.check_available():
         exit(-1)
 
     if args.attn_impl is None:
         if (
             inference_mode
-            and mlora_backend.device_name() == "cuda"
+            and moe_peft_backend.device_name() == "cuda"
             and is_flash_attn_2_available()
         ):
             args.attn_impl = "flash_attn"
@@ -248,11 +248,11 @@ if __name__ == "__main__":
             args.attn_impl = "eager"
 
     if args.device is None:
-        args.device = mlora.backend.default_device_name()
+        args.device = moe_peft.backend.default_device_name()
 
-    mlora_backend.use_deterministic_algorithms(args.deterministic)
-    mlora_backend.allow_tf32(args.tf32)
-    mlora_backend.manual_seed(args.seed)
+    moe_peft_backend.use_deterministic_algorithms(args.deterministic)
+    moe_peft_backend.allow_tf32(args.tf32)
+    moe_peft_backend.manual_seed(args.seed)
 
     with open(args.config, "r", encoding="utf8") as fp:
         config = json.load(fp)
@@ -260,9 +260,9 @@ if __name__ == "__main__":
     tokenizer, model = load_base_model()
     adapters = init_adapter_config(config, model)
 
-    mlora_backend.empty_cache()
+    moe_peft_backend.empty_cache()
 
-    if os.getenv("MLORA_EVALUATE_MODE") is None:
+    if os.getenv("MOE_PEFT_EVALUATE_MODE") is None:
         logging.info("Using efficient operators.")
     else:
         logging.info("Using deterministic operators.")
@@ -275,7 +275,7 @@ if __name__ == "__main__":
             concurrent_jobs=config.get("inference_lora_simultaneously_num", 2),
         )
     elif args.evaluate:
-        mlora.evaluate(
+        moe_peft.evaluate(
             model=model,
             tokenizer=tokenizer,
             configs=adapters,
@@ -285,7 +285,7 @@ if __name__ == "__main__":
             save_file=config.get("evaluate_result", None),
         )
     else:
-        mlora.train(
+        moe_peft.train(
             model=model,
             tokenizer=tokenizer,
             configs=adapters,

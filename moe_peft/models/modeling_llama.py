@@ -9,8 +9,8 @@ from transformers.models.llama import modeling_llama
 from transformers.models.llama.modeling_llama import apply_rotary_pos_emb, repeat_kv
 from transformers.utils import is_flash_attn_2_available
 
-from mlora.backends import backend
-from mlora.modules import (
+from moe_peft.backends import backend
+from moe_peft.modules import (
     ROPE_INIT_FUNCTIONS,
     FeedForward,
     Linear,
@@ -25,8 +25,8 @@ from mlora.modules import (
     flash_attention_forward,
     prepare_4d_causal_attention_mask,
 )
-from mlora.modules.mix_lora import _slice_tensor
-from mlora.utils import copy_parameters
+from moe_peft.modules.mix_lora import _slice_tensor
+from moe_peft.utils import copy_parameters
 
 
 @dataclass

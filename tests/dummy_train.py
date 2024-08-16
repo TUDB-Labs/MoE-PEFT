@@ -1,25 +1,25 @@
 import fire
 import torch
 
-import mlora
+import moe_peft
 
 
 def main(
     base_model: str,
     adapter_name: str = "lora_0",
-    train_data: str = "TUDB-Labs/Dummy-mLoRA",
-    test_prompt: str = "Could you provide an introduction to m-LoRA?",
+    train_data: str = "TUDB-Labs/Dummy-MoE-PEFT",
+    test_prompt: str = "Could you provide an introduction to MoE PEFT Factory?",
 ):
-    mlora.setup_logging("INFO")
+    moe_peft.setup_logging("INFO")
 
-    model: mlora.LLMModel = mlora.LLMModel.from_pretrained(
+    model: moe_peft.LLMModel = moe_peft.LLMModel.from_pretrained(
         base_model,
-        device=mlora.backend.default_device_name(),
+        device=moe_peft.backend.default_device_name(),
         load_dtype=torch.bfloat16,
     )
-    tokenizer = mlora.Tokenizer(base_model)
+    tokenizer = moe_peft.Tokenizer(base_model)
 
-    lora_config = mlora.LoraConfig(
+    lora_config = moe_peft.LoraConfig(
         adapter_name=adapter_name,
         lora_r_=32,
         lora_alpha_=64,
@@ -32,7 +32,7 @@ def main(
         },
     )
 
-    train_config = mlora.TrainConfig(
+    train_config = moe_peft.TrainConfig(
         adapter_name=adapter_name,
         data_path=train_data,
         num_epochs=10,
@@ -41,28 +41,28 @@ def main(
         learning_rate=1e-4,
     )
 
-    with mlora.backends.no_cache():
+    with moe_peft.backends.no_cache():
         model.init_adapter(lora_config)
-        mlora.train(model=model, tokenizer=tokenizer, configs=[train_config])
+        moe_peft.train(model=model, tokenizer=tokenizer, configs=[train_config])
         lora_config, lora_weight = model.unload_adapter(adapter_name)
 
     generate_configs = [
-        mlora.GenerateConfig(
+        moe_peft.GenerateConfig(
             adapter_name=adapter_name,
             prompts=[test_prompt],
             stop_token="\n",
         ),
-        mlora.GenerateConfig(
+        moe_peft.GenerateConfig(
             adapter_name="default",
             prompts=[test_prompt],
             stop_token="\n",
         ),
     ]
 
-    with mlora.backends.no_cache():
+    with moe_peft.backends.no_cache():
         model.init_adapter(lora_config, lora_weight)
-        model.init_adapter(mlora.AdapterConfig(adapter_name="default"))
-        outputs = mlora.generate(
+        model.init_adapter(moe_peft.AdapterConfig(adapter_name="default"))
+        outputs = moe_peft.generate(
             model=model,
             tokenizer=tokenizer,
             configs=generate_configs,

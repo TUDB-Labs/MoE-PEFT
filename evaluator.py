@@ -1,7 +1,7 @@
 import fire
 import torch
 
-import mlora
+import moe_peft
 
 
 def main(
@@ -16,28 +16,30 @@ def main(
     save_file: str = None,
     batch_size: int = 32,
     router_profile: bool = False,
-    device: str = mlora.backend.default_device_name(),
+    device: str = moe_peft.backend.default_device_name(),
 ):
 
-    mlora.setup_logging("INFO")
+    moe_peft.setup_logging("INFO")
 
-    if not mlora.backend.check_available():
+    if not moe_peft.backend.check_available():
         exit(-1)
 
-    model = mlora.LLMModel.from_pretrained(
+    model = moe_peft.LLMModel.from_pretrained(
         base_model,
         device=device,
         attn_impl="flash_attn" if flash_attn else "eager",
         bits=(8 if load_8bit else (4 if load_4bit else None)),
         load_dtype=torch.bfloat16 if load_16bit else torch.float32,
     )
-    tokenizer = mlora.Tokenizer(base_model)
+    tokenizer = moe_peft.Tokenizer(base_model)
     if lora_weights:
         adapter_name = model.load_adapter(lora_weights)
     else:
-        adapter_name = model.init_adapter(mlora.AdapterConfig(adapter_name="default"))
+        adapter_name = model.init_adapter(
+            moe_peft.AdapterConfig(adapter_name="default")
+        )
 
-    evaluate_paramas = mlora.EvaluateConfig(
+    evaluate_paramas = moe_peft.EvaluateConfig(
         adapter_name=adapter_name,
         task_name=task_name,
         data_path=data_path,
@@ -45,7 +47,7 @@ def main(
         router_profile=router_profile,
     )
 
-    mlora.evaluate(model, tokenizer, [evaluate_paramas], save_file=save_file)
+    moe_peft.evaluate(model, tokenizer, [evaluate_paramas], save_file=save_file)
 
 
 if __name__ == "__main__":

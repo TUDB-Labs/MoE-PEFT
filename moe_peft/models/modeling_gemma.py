@@ -3,18 +3,18 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers.models.gemma import modeling_gemma
 
-from mlora.backends import backend
-from mlora.models.modeling_llama import (
+from moe_peft.backends import backend
+from moe_peft.models.modeling_llama import (
     LLAMA_ATTENTION_CLASSES as GEMMA_ATTENTION_CLASSES,
 )
-from mlora.models.modeling_llama import (
+from moe_peft.models.modeling_llama import (
     LlamaConfig,
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaMLP,
 )
-from mlora.modules import FeedForward
-from mlora.utils import copy_parameters
+from moe_peft.modules import FeedForward
+from moe_peft.utils import copy_parameters
 
 
 class GemmaRMSNorm(nn.Module):
