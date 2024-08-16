@@ -8,7 +8,7 @@ huggingface_hub
 scikit-learn
 tiktoken
 mixlora>=0.2.2,<0.3.0
-gradio==4.29.0
+gradio==4.38.1
 peft==0.11.1
 pandas
 fire
