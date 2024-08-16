@@ -202,7 +202,7 @@ class LoraConfig(AdapterConfig):
         return config
 
 
-available_routing_strategies = ["mixlora", "mixlora-switch"]
+available_routing_strategies = ["mixlora", "mixlora-dynamic", "mixlora-switch"]
 
 
 @dataclass
@@ -219,6 +219,9 @@ class MixLoraConfig(LoraConfig):
     act_fn_: Optional[Union[str, torch.nn.Module]] = None
     # mixtral config
     top_k_: int = None
+    # dynamic config
+    top_p_: float = None
+    temperature_: float = None
     # switch transformers config
     router_z_loss_coef_: float = None
     expert_capacity_: int = None
@@ -248,6 +251,11 @@ class MixLoraConfig(LoraConfig):
         )
         if self.routing_strategy_ == "mixlora":
             assert isinstance(self.top_k_, int) and self.top_k_ > 0
+        elif self.routing_strategy_ == "mixlora-dynamic":
+            assert (
+                isinstance(self.top_p_, float) and self.top_p_ > 0 and self.top_p_ <= 1
+            )
+            assert isinstance(self.temperature_, float) and self.temperature_ >= 0
         elif self.routing_strategy_ == "mixlora-switch":
             assert (
                 isinstance(self.router_z_loss_coef_, float)
@@ -280,6 +288,11 @@ class MixLoraConfig(LoraConfig):
             lora_config.router_init_range_ = config.get("router_init_range", 0.02)
             lora_config.jitter_noise_ = config.get("jitter_noise", 0.0)
             lora_config.top_k_ = config.get("top_k", 2)
+        elif lora_config.routing_strategy_ == "mixlora-dynamic":
+            lora_config.router_init_range_ = config.get("router_init_range", 0.02)
+            lora_config.jitter_noise_ = config.get("jitter_noise", 0.0)
+            lora_config.top_p_ = config.get("top_p", 0.8)
+            lora_config.temperature_ = config.get("temperature", 0.0)
         elif lora_config.routing_strategy_ == "mixlora-switch":
             lora_config.router_init_range_ = config.get("router_init_range", 1.0)
             lora_config.jitter_noise_ = config.get("jitter_noise", 0.01)
@@ -308,6 +321,9 @@ class MixLoraConfig(LoraConfig):
             config["act_fn"] = self.act_fn_
         if self.routing_strategy_ == "mixlora":
             config["top_k"] = self.top_k_
+        elif self.routing_strategy_ == "mixlora-dynamic":
+            config["top_p"] = self.top_p_
+            config["temperature"] = self.temperature_
         elif self.routing_strategy_ == "mixlora-switch":
             config["expert_capacity"] = self.expert_capacity_
             config["sparse_step"] = self.sparse_step_
@@ -408,6 +424,7 @@ peft_type_dict = {
 
 routing_strategy_dict = {
     "mixlora": MixLoraConfig,
+    "mixlora-dynamic": MixLoraConfig,
     "mixlora-switch": MixLoraConfig,
     "loramoe": LoraMoeConfig,
     "mola": MolaConfig,

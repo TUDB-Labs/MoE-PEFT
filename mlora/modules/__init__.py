@@ -52,6 +52,8 @@ from .lora_linear import Linear, Lora, get_range_tensor
 
 # MixLoRA MoEs
 from .lora_moes import (
+    DynamicRouterLoss,
+    DynamicSparseMoe,
     LoraMoe,
     MixtralRouterLoss,
     MixtralSparseMoe,
@@ -85,6 +87,8 @@ __all__ = [
     "Linear",
     "MixtralRouterLoss",
     "MixtralSparseMoe",
+    "DynamicRouterLoss",
+    "DynamicSparseMoe",
     "SwitchRouterLoss",
     "SwitchSparseMoe",
     "LoraMoe",

@@ -8,6 +8,8 @@ from .abstracts import LLMMoeBlock
 from .config import LoraMoeConfig, MixLoraConfig, MolaConfig
 from .lora_linear import Linear
 from .mix_lora import (
+    DynamicRouterLoss,
+    DynamicSparseMoe,
     MixtralRouterLoss,
     MixtralSparseMoe,
     SwitchRouterLoss,
@@ -149,7 +151,11 @@ class MolaSparseMoe(LLMMoeBlock):
         return residual + final_hidden_states
 
 
-router_loss_dict = {"mixlora": MixtralRouterLoss, "mixlora-switch": SwitchRouterLoss}
+router_loss_dict = {
+    "mixlora": MixtralRouterLoss,
+    "mixlora-dynamic": DynamicRouterLoss,
+    "mixlora-switch": SwitchRouterLoss,
+}
 
 
 def router_loss_factory(config: MixLoraConfig) -> torch.nn.Module:
@@ -163,6 +169,7 @@ def router_loss_factory(config: MixLoraConfig) -> torch.nn.Module:
 
 moe_layer_dict = {
     "mixlora": MixtralSparseMoe,
+    "mixlora-dynamic": DynamicSparseMoe,
     "mixlora-switch": SwitchSparseMoe,
     "loramoe": LoraMoe,
     "mola": MolaSparseMoe,

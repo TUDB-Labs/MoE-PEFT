@@ -51,21 +51,24 @@ You can use the `MLORA_BACKEND_TYPE` environment variable to force m-LoRA to use
 
 ## Supported PEFT Methods
 
-|         | PEFT Methods                                             | Arguments*                                          |
-|---------|----------------------------------------------------------|-----------------------------------------------------|
-| &check; | [QLoRA](https://arxiv.org/abs/2402.12354)                | See *Quantize Methods*                              |
-| &check; | [LoRA+](https://arxiv.org/abs/2402.12354)                | `"loraplus_lr_ratio": 20.0`                         |
-| &check; | [DoRA](https://arxiv.org/abs/2402.09353)                 | `"use_dora": true`                                  |
-| &check; | [rsLoRA](https://arxiv.org/abs/2312.03732)               | `"use_rslora": true`                                |
-| &check; | [MoLA](https://arxiv.org/abs/2402.08562)                 | `"routing_strategy": "mola", "num_experts": 8`      |
-| &check; | [LoRAMoE](https://arxiv.org/abs/2312.09979)              | `"routing_strategy": "loramoe", "num_experts": 8`   |
-| &check; | [MixLoRA](https://arxiv.org/abs/2404.15159)              | See [MixLoRA](https://github.com/TUDB-Labs/MixLoRA) |
+|         | PEFT Methods                                             | Arguments*                                                |
+|---------|----------------------------------------------------------|-----------------------------------------------------------|
+| &check; | [QLoRA](https://arxiv.org/abs/2402.12354)                | See *Quantize Methods*                                    |
+| &check; | [LoRA+](https://arxiv.org/abs/2402.12354)                | `"loraplus_lr_ratio": 20.0`                               |
+| &check; | [DoRA](https://arxiv.org/abs/2402.09353)                 | `"use_dora": true`                                        |
+| &check; | [rsLoRA](https://arxiv.org/abs/2312.03732)               | `"use_rslora": true`                                      |
+| &check; | [MoLA](https://arxiv.org/abs/2402.08562)                 | `"routing_strategy": "mola", "num_experts": 8`            |
+| &check; | [LoRAMoE](https://arxiv.org/abs/2312.09979)              | `"routing_strategy": "loramoe", "num_experts": 8`         |
+| &check; | [MixLoRA](https://arxiv.org/abs/2404.15159)              | `"routing_strategy": "mixlora", "num_experts": 8`         |
+| &check; | MixLoRA-Dynamic                                          | `"routing_strategy": "mixlora-dynamic", "num_experts": 8` |
+| &check; | MixLoRA-Switch                                           | `"routing_strategy": "mixlora-switch", "num_experts": 8`  |
 
 *: Arguments of configuration file
 
 ### Notice of PEFT supports
 1. m-LoRA supports specific optimized operators for these PEFT methods, which can effectively improve the computing performance during training, evaluation and inference. However, these operators may cause a certain degree of accuracy loss (less than 5%). You can disable the optimized operators by defining the `MLORA_EVALUATE_MODE` environment variable in advance.
-2. Auxiliary Loss is not currently supported for Mo-LoRA (Mixture of LoRAs) methods other than MixLoRA
+2. Auxiliary Loss is not currently supported for Mo-LoRA (Mixture of LoRAs) methods other than MixLoRA.
+3. You can check detailed arguments of MixLoRA in [TUDB-Labs/MixLoRA](https://github.com/TUDB-Labs/MixLoRA).
 
 ## Supported Attention Methods
 

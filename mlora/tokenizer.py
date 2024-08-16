@@ -48,9 +48,10 @@ class Tokenizer:
     def decode(self, data: Tokens) -> str:
         return self.tokenizer.decode(data)
 
-    # get the mask from tokens
+    # Get the mask from tokens
+    # https://huggingface.co/docs/transformers/glossary#attention-mask
     #   example: tokens is [2, 3, pad, pad, 4, 5]
-    #            output is [0, 0, 1,   1,   0, 0]
+    #            output is [1, 1, 0,   0,   1, 1]
     def mask_from(self, tokens: Tokens) -> Masks:
         mask_tokens = [self.pad_id_]
-        return [int(tok in mask_tokens) for tok in tokens]
+        return [int(tok not in mask_tokens) for tok in tokens]
