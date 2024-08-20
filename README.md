@@ -1,4 +1,4 @@
-# MoE-PEFT: An Efficient LLM Fine-Tuning Factory Optimized for Mix of Expert Parameter-Efficient Fine-Tuning.
+# MoE-PEFT: An Efficient LLM Fine-Tuning Factory for Mix of Expert(MOE) Parameter-Efficient Fine-Tuning.
 [![](https://github.com/TUDB-Labs/MoE-PEFT/actions/workflows/python-test.yml/badge.svg)](https://github.com/TUDB-Labs/MoE-PEFT/actions/workflows/python-test.yml)
 [![](https://img.shields.io/github/stars/TUDB-Labs/MoE-PEFT?logo=GitHub&style=flat)](https://github.com/TUDB-Labs/MoE-PEFT/stargazers)
 [![](https://img.shields.io/github/v/release/TUDB-Labs/MoE-PEFT?logo=Github)](https://github.com/TUDB-Labs/MoE-PEFT/releases/latest)
@@ -6,13 +6,13 @@
 [![](https://img.shields.io/docker/v/mikecovlee/moe_peft?logo=Docker&label=docker)](https://hub.docker.com/r/mikecovlee/moe_peft/tags)
 [![](https://img.shields.io/github/license/TUDB-Labs/MoE-PEFT)](http://www.apache.org/licenses/LICENSE-2.0)
 
-MoE-PEFT is an open-source *LLMOps* framework built on [m-LoRA](https://github.com/TUDB-Labs/mLoRA) developed by the [IDs Lab](https://ids-lab-asia.github.io). It is designed for high-throughput fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as MOE + Others (like LoRA, DoRA). Key features of MoE-PEFT include:
+MoE-PEFT is an open-source *LLMOps* framework built on [m-LoRA](https://github.com/TUDB-Labs/mLoRA). It is designed for high-throughput fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as MOE + Others (like LoRA, DoRA). Key features of MoE-PEFT include:
+
+- MoE PEFT optimization, mainly for [MixLoRA](https://github.com/TUDB-Labs/MixLoRA) and other MOE implementation.
 
 - Concurrent fine-tuning of multiple adapters with a shared pre-trained model.
 
 - Support for multiple PEFT algorithms and various pre-trained models.
-
-- MoE PEFT optimization, mainly for [MixLoRA](https://github.com/TUDB-Labs/MixLoRA) and other MOE framework.
 
 You can try MoE-PEFT with [Google Colab](https://githubtocolab.com/TUDB-Labs/MoE-PEFT/blob/main/misc/finetune-demo.ipynb) before local installation.
 
@@ -200,6 +200,5 @@ You can check all available tags from: [mikecovlee/moe_peft/tags](https://hub.do
 Please note that this container only provides a proper environment to run MoE-PEFT. The codes of MoE-PEFT are not included.
 
 ## Copyright
-Copyright © 2023-2024 IDs Lab, Sichuan University
 
 This project is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).
