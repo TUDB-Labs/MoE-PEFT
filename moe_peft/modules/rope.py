@@ -22,7 +22,12 @@ def _compute_default_rope_parameters(
             if config.partial_rotary_factor_ is not None
             else 1.0
         )
-        dim = int((config.dim_ // config.n_heads_) * partial_rotary_factor)
+        head_dim = (
+            config.dim_ // config.n_heads_
+            if config.head_dim_ is None
+            else config.head_dim_
+        )
+        dim = int(head_dim * partial_rotary_factor)
 
     attention_factor = 1.0  # Unused in this type of RoPE
 

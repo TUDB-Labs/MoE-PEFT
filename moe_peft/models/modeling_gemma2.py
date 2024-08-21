@@ -52,7 +52,7 @@ class Gemma2RotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
 
     @torch.no_grad()
-    def forward(self, x, position_ids, seq_len=None):
+    def forward(self, x, position_ids):
         # x: [bs, num_attention_heads, seq_len, head_size]
         self.inv_freq.to(x.device)
         inv_freq_expanded = (
@@ -324,7 +324,8 @@ class Gemma2DecoderLayer(LLMDecoder):
             and attention_mask is not None
         ):
             if self.config_.attn_implementation_ == "flash_attn":
-                attention_mask = attention_mask[:, -self.sliding_window_ :]
+                if past_key_value is not None:  # when decoding
+                    attention_mask = attention_mask[:, -self.sliding_window :]
             else:
                 min_dtype = torch.finfo(hidden_states.dtype).min
                 sliding_window_mask = torch.tril(
