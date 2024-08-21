@@ -245,11 +245,9 @@ def flash_attention_forward(
         )
         attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
 
-    # if position_ids is provided and check not all examples (row) contain only 1 sequence, and is in pre-fill/training stage
-    # then use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
     elif (
         position_ids is not None
-        and not (position_ids[:, -1] == position_ids.size(1) - 1).all()
+        and not (torch.diff(position_ids, dim=-1) >= 0).all()
         and query_length != 1
     ):
         batch_size = query_states.size(0)

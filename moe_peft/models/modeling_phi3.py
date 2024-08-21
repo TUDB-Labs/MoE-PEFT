@@ -1,5 +1,6 @@
+import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -34,9 +35,70 @@ from .modeling_llama import LlamaRMSNorm as Phi3RMSNorm
 @dataclass
 class Phi3Config(LLMModelConfig):
     rms_norm_eps_: float = 1e-6
+    original_max_position_embeddings_: int = 4096
+    rope_scaling_: Optional[Dict[str, Any]] = None
     use_sliding_window_: bool = False
     sliding_window_: int = 4096
     resid_pdrop_: float = 0.0
+
+
+class Phi3LongRoPEScaledRotaryEmbedding(Phi3RotaryEmbedding):
+    def __init__(self, dim, config: Phi3Config, device=None):
+        super().__init__(dim, config.max_seq_len_, config.rope_theta_, device)
+
+        self.short_factor = config.rope_scaling_["short_factor"]
+        self.long_factor = config.rope_scaling_["long_factor"]
+        self.original_max_position_embeddings = config.original_max_position_embeddings_
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.original_max_position_embeddings:
+            ext_factors = torch.tensor(
+                self.long_factor, dtype=torch.float32, device=x.device
+            )
+        else:
+            ext_factors = torch.tensor(
+                self.short_factor, dtype=torch.float32, device=x.device
+            )
+
+        inv_freq_shape = (
+            torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float()
+            / self.dim
+        )
+        self.inv_freq = 1.0 / (ext_factors * self.base**inv_freq_shape)
+
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        )
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        # Force float32 since bfloat16 loses precision on long contexts
+        # See https://github.com/huggingface/transformers/pull/29285
+        device_type = x.device.type
+        device_type = (
+            device_type
+            if isinstance(device_type, str) and device_type != "mps"
+            else "cpu"
+        )
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (
+                inv_freq_expanded.float() @ position_ids_expanded.float()
+            ).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+
+            scale = self.max_position_embeddings / self.original_max_position_embeddings
+            if scale <= 1.0:
+                scaling_factor = 1.0
+            else:
+                scaling_factor = math.sqrt(
+                    1
+                    + math.log(scale) / math.log(self.original_max_position_embeddings)
+                )
+
+            cos = emb.cos() * scaling_factor
+            sin = emb.sin() * scaling_factor
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 class Phi3Attention(LLMAttention):
@@ -376,6 +438,25 @@ class Phi3DecoderLayer(LLMDecoder):
 
 
 class Phi3ForCausalLM(LLMForCausalLM):
+    def _init_rope(self):
+        if self.config_.rope_scaling_ is None:
+            return Phi3RotaryEmbedding(
+                self.config_.head_dim_,
+                max_position_embeddings=self.config_.max_seq_len_,
+                base=self.config_.rope_theta_,
+                device=self.config_.device_,
+            )
+        else:
+            scaling_type = self.config_.rope_scaling_["type"]
+            assert scaling_type == "longrope", ValueError(
+                f"Unknown RoPE scaling type {scaling_type}"
+            )
+            return Phi3LongRoPEScaledRotaryEmbedding(
+                self.config_.head_dim_,
+                config=self.config_,
+                device=self.config_.device_,
+            )
+
     def __init__(self, config: Phi3Config) -> None:
         super().__init__()
         self.config_ = config
@@ -383,12 +464,7 @@ class Phi3ForCausalLM(LLMForCausalLM):
         self.vocab_size_ = config.vocab_size_
         self.embed_tokens_: Phi3Embedding = None
         self.norm_: Phi3Embedding = None
-        self.rotary_emb_ = Phi3RotaryEmbedding(
-            config.head_dim_,
-            max_position_embeddings=config.max_seq_len_,
-            base=config.rope_theta_,
-            device=config.device_,
-        )
+        self.rotary_emb_ = self._init_rope()
         self.lm_head_ = nn.Linear(
             config.dim_,
             config.vocab_size_,
@@ -452,6 +528,8 @@ class Phi3ForCausalLM(LLMForCausalLM):
             resid_pdrop_=llm_config.resid_pdrop,
             max_seq_len_=llm_config.max_position_embeddings,
             rope_theta_=llm_config.rope_theta,
+            rope_scaling_=llm_config.rope_scaling,
+            original_max_position_embeddings_=llm_config.original_max_position_embeddings,
             pad_token_id_=llm_config.pad_token_id,
             attn_implementation_=attn_impl,
             use_sliding_window_=use_sliding_window,

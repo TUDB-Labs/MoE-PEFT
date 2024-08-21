@@ -1,4 +1,4 @@
-# MoE-PEFT: An Efficient LLM Fine-Tuning Factory for Mix of Expert(MOE) Parameter-Efficient Fine-Tuning.
+# MoE-PEFT: An Efficient LLM Fine-Tuning Factory for Mixture of Expert (MoE) Parameter-Efficient Fine-Tuning.
 [![](https://github.com/TUDB-Labs/MoE-PEFT/actions/workflows/python-test.yml/badge.svg)](https://github.com/TUDB-Labs/MoE-PEFT/actions/workflows/python-test.yml)
 [![](https://img.shields.io/github/stars/TUDB-Labs/MoE-PEFT?logo=GitHub&style=flat)](https://github.com/TUDB-Labs/MoE-PEFT/stargazers)
 [![](https://img.shields.io/github/v/release/TUDB-Labs/MoE-PEFT?logo=Github)](https://github.com/TUDB-Labs/MoE-PEFT/releases/latest)
@@ -6,13 +6,15 @@
 [![](https://img.shields.io/docker/v/mikecovlee/moe_peft?logo=Docker&label=docker)](https://hub.docker.com/r/mikecovlee/moe_peft/tags)
 [![](https://img.shields.io/github/license/TUDB-Labs/MoE-PEFT)](http://www.apache.org/licenses/LICENSE-2.0)
 
-MoE-PEFT is an open-source *LLMOps* framework built on [m-LoRA](https://github.com/TUDB-Labs/mLoRA). It is designed for high-throughput fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as MOE + Others (like LoRA, DoRA). Key features of MoE-PEFT include:
+MoE-PEFT is an open-source *LLMOps* framework built on [m-LoRA](https://github.com/TUDB-Labs/mLoRA). It is designed for high-throughput fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as MoE + Others (like LoRA, DoRA). Key features of MoE-PEFT include:
 
-- MoE PEFT optimization, mainly for [MixLoRA](https://github.com/TUDB-Labs/MixLoRA) and other MOE implementation.
+- Concurrent fine-tuning, evaluation, and inference of multiple adapters with a shared pre-trained model.
 
-- Concurrent fine-tuning of multiple adapters with a shared pre-trained model.
+- **MoE PEFT** optimization, mainly for [MixLoRA](https://github.com/TUDB-Labs/MixLoRA) and other MoE implementation.
 
 - Support for multiple PEFT algorithms and various pre-trained models.
+
+- Seamless integration with the [HuggingFace](https://huggingface.co) ecosystem.
 
 You can try MoE-PEFT with [Google Colab](https://githubtocolab.com/TUDB-Labs/MoE-PEFT/blob/main/misc/finetune-demo.ipynb) before local installation.
 
@@ -40,7 +42,7 @@ You can use the `MOE_PEFT_BACKEND_TYPE` environment variable to force MoE-PEFT t
 | &check; | [Gemma 2](https://huggingface.co/google)         | 9B/27B      |
 | &check; | [Mistral](https://huggingface.co/mistralai)      | 7B          |
 | &check; | [Phi 1.5/2](https://huggingface.co/microsoft)    | 2.7B        |
-| &check; | [Phi 3](https://huggingface.co/microsoft)        | 3.8B/7B/14B |
+| &check; | [Phi 3/3.5](https://huggingface.co/microsoft)    | 3.8B/7B/14B |
 | &check; | [ChatGLM 1/2/3](https://huggingface.co/THUDM)    | 6B          |
 | &check; | [GLM 4](https://huggingface.co/THUDM)            | 6B          |
 
@@ -52,8 +54,8 @@ You can use the `MOE_PEFT_BACKEND_TYPE` environment variable to force MoE-PEFT t
 | &check; | [MoLA](https://arxiv.org/abs/2402.08562)                 | `"routing_strategy": "mola", "num_experts": 8`            |
 | &check; | [LoRAMoE](https://arxiv.org/abs/2312.09979)              | `"routing_strategy": "loramoe", "num_experts": 8`         |
 | &check; | [MixLoRA](https://arxiv.org/abs/2404.15159)              | `"routing_strategy": "mixlora", "num_experts": 8`         |
-| &check; | MixLoRA-Dynamic                                          | `"routing_strategy": "mixlora-dynamic", "num_experts": 8` |
 | &check; | MixLoRA-Switch                                           | `"routing_strategy": "mixlora-switch", "num_experts": 8`  |
+| &check; | MixLoRA-Dynamic                                          | `"routing_strategy": "mixlora-dynamic", "num_experts": 8` |
 | &check; | [QLoRA](https://arxiv.org/abs/2402.12354)                | See *Quantize Methods*                                    |
 | &check; | [LoRA+](https://arxiv.org/abs/2402.12354)                | `"loraplus_lr_ratio": 20.0`                               |
 | &check; | [DoRA](https://arxiv.org/abs/2402.09353)                 | `"use_dora": true`                                        |
@@ -63,7 +65,7 @@ You can use the `MOE_PEFT_BACKEND_TYPE` environment variable to force MoE-PEFT t
 
 ### Notice of PEFT supports
 1. MoE-PEFT supports specific optimized operators for these PEFT methods, which can effectively improve the computing performance during training, evaluation and inference. However, these operators may cause a certain degree of accuracy loss (less than 5%). You can disable the optimized operators by defining the `MOE_PEFT_EVALUATE_MODE` environment variable in advance.
-2. Auxiliary Loss is not currently supported for Mo-LoRA (Mixture of LoRAs) methods other than MixLoRA.
+2. Auxiliary Loss is not currently supported for MoE PEFT methods other than MixLoRA.
 3. You can check detailed arguments of MixLoRA in [TUDB-Labs/MixLoRA](https://github.com/TUDB-Labs/MixLoRA).
 
 ## Supported Attention Methods
@@ -131,7 +133,6 @@ Example of (4): `export MOE_PEFT_METRIC_PATH=/path-to-your-git-repo/evaluate/met
  + Quantization with Qwen2 have no effect (same with transformers).
  + Applying quantization with DoRA will result in higher memory and computation cost (same with PEFT).
  + Sliding window attention with generate cache may product abnormal output.
- + Lack of *Long RoPE* support.
 
 ## Installation
 
