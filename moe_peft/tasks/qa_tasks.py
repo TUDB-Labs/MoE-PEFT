@@ -122,9 +122,9 @@ class PIQA(QuestionAnswerTask):
     def loading_data(
         self, is_train: bool = True, path: Optional[str] = None
     ) -> List[InputData]:
-        data = hf_datasets.load_dataset("piqa" if path is None else path)[
-            "train" if is_train else "validation"
-        ]
+        data = hf_datasets.load_dataset(
+            "piqa" if path is None else path, trust_remote_code=True
+        )["train" if is_train else "validation"]
         logging.info("Preparing data for PIQA")
         ret: List[InputData] = []
         for data_point in data:
@@ -150,9 +150,9 @@ class SIQA(QuestionAnswerTask):
     def loading_data(
         self, is_train: bool = True, path: Optional[str] = None
     ) -> List[InputData]:
-        data = hf_datasets.load_dataset("social_i_qa" if path is None else path)[
-            "train" if is_train else "validation"
-        ]
+        data = hf_datasets.load_dataset(
+            "social_i_qa" if path is None else path, trust_remote_code=True
+        )["train" if is_train else "validation"]
         logging.info("Preparing data for SIQA")
         ret: List[InputData] = []
         for data_point in data:
@@ -212,7 +212,9 @@ class WinoGrande(QuestionAnswerTask):
         self, is_train: bool = True, path: Optional[str] = None
     ) -> List[InputData]:
         data = hf_datasets.load_dataset(
-            "winogrande" if path is None else path, "winogrande_debiased"
+            "winogrande" if path is None else path,
+            "winogrande_debiased",
+            trust_remote_code=True,
         )["train" if is_train else "validation"]
         logging.info("Preparing data for WinoGrande")
         ret: List[InputData] = []

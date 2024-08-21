@@ -502,7 +502,9 @@ class LLMModel(torch.nn.Module):
                 self.adapter_configs_[output_data.adapter_name]
             )
             if loss_fn is not None:
-                output_data.aux_loss = loss_fn(all_router_logits[idx], attention_mask)
+                output_data.aux_loss = loss_fn(
+                    all_router_logits[idx], attention_mask[start_idx:end_idx]
+                )
 
         return output
 
