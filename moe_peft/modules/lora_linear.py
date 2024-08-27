@@ -501,6 +501,9 @@ class Linear(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, input_args: LLMModelInput
     ) -> torch.Tensor:
+        assert (
+            hidden_states.dim() == 3
+        ), "The input tensor of LoRA linear requires dim == 3 (batch_size, sequence_len, dim)"
         if input_args.efficient_operator_ and len(self.moes_) == 0:
             return self._efficient_impl(hidden_states, input_args)
         else:

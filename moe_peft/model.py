@@ -206,7 +206,8 @@ def init_lora_layer_weight(
 
     for proj_name, lora_linear in all_state_dict.items():
         lora_linear: Linear
-        if proj_name not in target_modules or not target_modules[proj_name]:
+        _proj_name = proj_name.split(".")[-1]
+        if _proj_name not in target_modules or not target_modules[_proj_name]:
             continue
         module_name = (
             "self_attn"
@@ -214,7 +215,7 @@ def init_lora_layer_weight(
             else ("mlp" if proj_name in mlp_state_dict else None)
         )
         module_name = f"{model_prefix_name}.layers.{transformer_layer.layer_id_}.{module_name}.{proj_name}"
-        if proj_name in moe_layer_name_list:
+        if _proj_name in moe_layer_name_list:
             if moe_init_strategy == "plugin":
                 # init for gating mechanisms
                 lora_linear.moes_[lora_config.adapter_name] = moe_layer_factory(
@@ -290,7 +291,8 @@ def get_lora_layer_weight(
 
     for proj_name, lora_linear in all_state_dict.items():
         lora_linear: Linear
-        if proj_name not in target_modules or not target_modules[proj_name]:
+        _proj_name = proj_name.split(".")[-1]
+        if _proj_name not in target_modules or not target_modules[_proj_name]:
             continue
         module_name = (
             "self_attn"
@@ -298,7 +300,7 @@ def get_lora_layer_weight(
             else ("mlp" if proj_name in mlp_state_dict else None)
         )
         module_name = f"{model_prefix_name}.layers.{transformer_layer.layer_id_}.{module_name}.{proj_name}"
-        if proj_name in moe_layer_name_list:
+        if _proj_name in moe_layer_name_list:
             moe_layer = (
                 lora_linear.moes_[lora_config.adapter_name]
                 if lora_config.adapter_name in lora_linear.moes_
