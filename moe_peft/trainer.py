@@ -278,6 +278,7 @@ def train(
     strategy: str = "optim",
     cutoff_len: Optional[int] = None,
     save_step: Optional[int] = None,
+    evaluate_step: Optional[int] = None,
     save_dir: Optional[str] = None,
 ) -> None:
     if cutoff_len is None:
@@ -329,8 +330,8 @@ def train(
                 )
 
             if (
-                config.evaluate_steps is not None
-                and config.training_steps_ % config.evaluate_steps == 0
+                evaluate_step is not None
+                and config.training_steps_ % evaluate_step == 0
             ):
                 evaluate_configs.extend(config.evaluate_configs_)
 
@@ -365,10 +366,17 @@ def train(
     )
 
     if len(evaluate_results) > 0:
+        result = {}
+        for evaluate_result in evaluate_results:
+            name = evaluate_result["adapter_name"]
+            acc = evaluate_result["metrics"]["accuracy"]
+            if name not in result or acc > result[name]["metrics"]["accuracy"]:
+                result[name] = evaluate_result
+                
         if save_dir is not None:
             save_file = f"{save_dir}{os.sep}moe_peft_train_{int(time.time())}.json"
             with open(save_file, "w") as f:
-                json.dump(evaluate_results, f, indent=4)
+                json.dump(result, f, indent=4)
             logging.info(f"saving evaluation result to {save_file}")
         else:
             print(json.dumps(evaluate_results, indent=4))

@@ -293,5 +293,6 @@ if __name__ == "__main__":
             strategy=config["train_strategy"],
             cutoff_len=config["cutoff_len"],
             save_step=config["save_step"],
+            evaluate_step = config["evaluate_steps"],
             save_dir=args.dir,
         )
