@@ -278,7 +278,6 @@ def train(
     strategy: str = "optim",
     cutoff_len: Optional[int] = None,
     save_step: Optional[int] = None,
-    evaluate_step: Optional[int] = None,
     save_dir: Optional[str] = None,
 ) -> None:
     if cutoff_len is None:
@@ -330,8 +329,8 @@ def train(
                 )
 
             if (
-                evaluate_step is not None
-                and config.training_steps_ % evaluate_step == 0
+                config.evaluate_steps is not None
+                and config.training_steps_ % config.evaluate_steps == 0
             ):
                 evaluate_configs.extend(config.evaluate_configs_)
 
