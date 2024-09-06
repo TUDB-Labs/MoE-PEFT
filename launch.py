@@ -2,10 +2,22 @@
 import json
 import os
 
+import datasets as hf_datasets
 import fire
 
 file_path = "templates"
 work_path = os.path.dirname(os.path.abspath(__file__))
+
+
+def load_dataset(path: str):
+    if path.endswith(".json") or path.endswith(".jsonl"):
+        data = hf_datasets.load_dataset("json", data_files=path)
+    elif ":" in path:
+        split = path.split(":")
+        data = hf_datasets.load_dataset(split[0], split[1])
+    else:
+        data = hf_datasets.load_dataset(path)
+    return data
 
 
 def compose_command(
@@ -124,7 +136,10 @@ def gen_config(
                 lora_config["name"] = f"multi_task_{index}"
                 lora_config["task_name"] = task_name
             elif task_name not in moe_peft.tasks.task_dict:
-                assert os.path.exists(task_name), f"File '{task_name}' not exist."
+                try:
+                    load_dataset(task_name)
+                except:
+                    raise RuntimeError(f"Task name '{task_name}' not exist.")
                 lora_config["name"] = f"casual_{index}"
                 lora_config["task_name"] = "casual"
                 lora_config["data"] = task_name
