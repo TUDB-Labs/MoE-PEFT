@@ -14,7 +14,7 @@ from .mixlora import (
     SwitchRouterLoss,
     SwitchSparseMoe,
 )
-from .mola import MolaConfig, MolaSparseMoe
+from .mola import MolaConfig, MolaRouterLoss, MolaSparseMoe
 
 peft_type_dict = {
     "LORA": LoraConfig,
@@ -35,6 +35,7 @@ router_loss_dict = {
     "mixlora": MixtralRouterLoss,
     "mixlora-dynamic": DynamicRouterLoss,
     "mixlora-switch": SwitchRouterLoss,
+    "mola": MolaRouterLoss,
 }
 
 moe_layer_dict = {

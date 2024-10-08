@@ -30,7 +30,7 @@ def _mixlora_compatible_forward(
 
 
 def _mixtral_load_balancing_loss_func(
-    gate_logits: List[torch.Tensor],
+    gate_logits: torch.Tensor,
     num_experts: int,
     top_k: int,
     attention_mask: Optional[torch.Tensor] = None,

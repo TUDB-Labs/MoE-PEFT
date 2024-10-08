@@ -9,8 +9,12 @@ from moe_peft.common import LoraConfig
 class MolaConfig(LoraConfig):
     top_k_: int = None
     num_experts_: int = None
-    router_init_range_: float = None
     routing_strategy_: str = "mola"
+    router_init_range_: float = None
+    # this router loss is copied from MixLoRA
+    # and only for test MoE-PEFT propose
+    router_aux_loss_coef_: float = None
+    router_loss_: bool = True
 
     def check(self) -> "MolaConfig":
         super().check()
@@ -19,6 +23,11 @@ class MolaConfig(LoraConfig):
         assert (
             isinstance(self.router_init_range_, float) and self.router_init_range_ >= 0
         )
+        assert (
+            isinstance(self.router_aux_loss_coef_, float)
+            and self.router_aux_loss_coef_ >= 0
+        )
+        assert isinstance(self.router_loss_, bool)
 
         return self
 
@@ -28,6 +37,8 @@ class MolaConfig(LoraConfig):
             top_k_=config.get("top_k", 2),
             num_experts_=config["num_experts"],
             router_init_range_=config.get("router_init_range", 5.0),
+            router_aux_loss_coef_=config.get("router_aux_loss_coef", 0.001),
+            router_loss_=config.get("router_loss", False),
             **LoraConfig.from_config(config).__dict__,
         )
 

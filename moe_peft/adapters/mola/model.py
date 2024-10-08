@@ -9,6 +9,74 @@ from moe_peft.common import Linear, LLMMoeBlock
 from .config import MolaConfig
 
 
+# copied from mixlora.model._mixtral_load_balancing_loss_func
+def _mixtral_load_balancing_loss_func(
+    gate_logits: torch.Tensor,
+    num_experts: int,
+    top_k: int,
+    attention_mask: Optional[torch.Tensor] = None,
+) -> float:
+    routing_weights = torch.nn.functional.softmax(gate_logits, dim=-1)
+
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = routing_weights.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand(
+                (num_hidden_layers, batch_size, sequence_length, top_k, num_experts)
+            )
+            .reshape(-1, top_k, num_experts)
+            .to(routing_weights.device)
+        )
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(
+            expert_mask.float() * expert_attention_mask, dim=0
+        ) / torch.sum(expert_attention_mask, dim=0)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(routing_weights.device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(
+            routing_weights * router_per_expert_attention_mask, dim=0
+        ) / torch.sum(router_per_expert_attention_mask, dim=0)
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
+
+
+class MolaRouterLoss(torch.nn.Module):
+    def __init__(self, config: MolaConfig) -> None:
+        super().__init__()
+        self.aux_loss_coef = config.router_aux_loss_coef_
+        self.experts = config.num_experts_
+        self.topk = config.top_k_
+
+    def forward(self, gate_logits, attention_mask) -> torch.Tensor:
+        return self.aux_loss_coef * _mixtral_load_balancing_loss_func(
+            gate_logits, self.experts, self.topk, attention_mask
+        )
+
+
 class MolaSparseMoe(LLMMoeBlock):
     def __init__(
         self,
