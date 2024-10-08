@@ -16,12 +16,12 @@ def main(
     save_file: str = None,
     batch_size: int = 32,
     router_profile: bool = False,
-    device: str = moe_peft.backend.default_device_name(),
+    device: str = moe_peft.executor.default_device_name(),
 ):
 
     moe_peft.setup_logging("INFO")
 
-    if not moe_peft.backend.check_available():
+    if not moe_peft.executor.check_available():
         exit(-1)
 
     model = moe_peft.LLMModel.from_pretrained(

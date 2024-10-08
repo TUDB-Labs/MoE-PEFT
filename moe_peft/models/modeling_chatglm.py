@@ -8,8 +8,7 @@ import torch.nn.functional as F
 from torch.nn import LayerNorm
 from transformers.utils import is_flash_attn_2_available
 
-from moe_peft.backends import backend
-from moe_peft.modules import (
+from moe_peft.common import (
     FeedForward,
     Linear,
     LLMAttention,
@@ -19,9 +18,11 @@ from moe_peft.modules import (
     LLMForCausalLM,
     LLMModelConfig,
     LLMModelInput,
+    collect_plugin_router_logtis,
     flash_attention_forward,
+    slice_tensor,
 )
-from moe_peft.modules.mix_lora import _slice_tensor
+from moe_peft.executors import executor
 from moe_peft.utils import copy_parameters
 
 
@@ -523,16 +524,16 @@ class GLMMLP(LLMFeedForward):
 
             lora_name = f"moe.{moe_name}.experts.{expert_idx}"
             if lora_name in self.dense_h_to_4h.loras_:
-                lora_data = _slice_tensor(hidden_states, top_x, input_dtype)
+                lora_data = slice_tensor(hidden_states, top_x, input_dtype)
                 act_result = self.activation_func(
                     self.dense_h_to_4h.loras_[lora_name].forward(
-                        _slice_tensor(common_dense_h_to_4h, top_x, input_dtype),
+                        slice_tensor(common_dense_h_to_4h, top_x, input_dtype),
                         lora_data,
                     )
                 )
             else:
                 act_result = self.activation_func(
-                    _slice_tensor(common_dense_h_to_4h, top_x, input_dtype)
+                    slice_tensor(common_dense_h_to_4h, top_x, input_dtype)
                 )
 
             if lora_name in self.dense_4h_to_h.loras_:
@@ -634,6 +635,11 @@ class GLMDecoderLayer(LLMDecoder):
             mlp_output, p=self.hidden_dropout, training=not input_args.inference_mode_
         )
         output = residual + output
+
+        if input_args.output_router_logits_:
+            router_logits = collect_plugin_router_logtis(
+                router_logits, input_args, self
+            )
 
         return output, *router_logits
 
@@ -759,7 +765,7 @@ class GLMForCausalLM(LLMForCausalLM):
         llm_model,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = backend.default_device_name(),
+        device: str = executor.default_device_name(),
     ):
         assert not use_sliding_window, "ChatGLM model does not support SWA."
         # Get the config from LLM model and input args.

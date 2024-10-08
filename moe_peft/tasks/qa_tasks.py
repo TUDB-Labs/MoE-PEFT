@@ -4,7 +4,7 @@ from typing import List, Optional
 import datasets as hf_datasets
 import torch
 
-from moe_peft.modules import InputData
+from moe_peft.common import InputData
 
 from .common import AutoMetric, BasicMetric, CommonSenseTask
 
@@ -33,7 +33,9 @@ class ARC(QuestionAnswerTask):
         self, is_train: bool = True, path: Optional[str] = None
     ) -> List[InputData]:
         data = hf_datasets.load_dataset(
-            "allenai/ai2_arc" if path is None else path, self.subject_
+            "allenai/ai2_arc" if path is None else path,
+            self.subject_,
+            trust_remote_code=True,
         )["train" if is_train else "test"]
         logging.info(f"Preparing data for {self.subject_}")
         ret: List[InputData] = []
@@ -63,9 +65,10 @@ class BoolQ(QuestionAnswerTask):
     def loading_data(
         self, is_train: bool = True, path: Optional[str] = None
     ) -> List[InputData]:
-        data = hf_datasets.load_dataset("google/boolq" if path is None else path)[
-            "train" if is_train else "validation"
-        ]
+        data = hf_datasets.load_dataset(
+            "google/boolq" if path is None else path,
+            trust_remote_code=True,
+        )["train" if is_train else "validation"]
         logging.info("Preparing data for BoolQ")
         ret: List[InputData] = []
         for data_point in data:
@@ -92,7 +95,9 @@ class OpenBookQA(QuestionAnswerTask):
         self, is_train: bool = True, path: Optional[str] = None
     ) -> List[InputData]:
         data = hf_datasets.load_dataset(
-            "allenai/openbookqa" if path is None else path, "main"
+            "allenai/openbookqa" if path is None else path,
+            "main",
+            trust_remote_code=True,
         )["train" if is_train else "test"]
         logging.info("Preparing data for OpenBookQA")
         ret: List[InputData] = []
@@ -180,9 +185,10 @@ class HellaSwag(QuestionAnswerTask):
     def loading_data(
         self, is_train: bool = True, path: Optional[str] = None
     ) -> List[InputData]:
-        data = hf_datasets.load_dataset("Rowan/hellaswag" if path is None else path)[
-            "train" if is_train else "validation"
-        ]
+        data = hf_datasets.load_dataset(
+            "Rowan/hellaswag" if path is None else path,
+            trust_remote_code=True,
+        )["train" if is_train else "validation"]
         logging.info("Preparing data for HellaSwag")
         ret: List[InputData] = []
         for data_point in data:
@@ -241,9 +247,9 @@ class CommonSenseQA(QuestionAnswerTask):
     def loading_data(
         self, is_train: bool = True, path: Optional[str] = None
     ) -> List[InputData]:
-        data = hf_datasets.load_dataset("tau/commonsense_qa" if path is None else path)[
-            "train" if is_train else "validation"
-        ]
+        data = hf_datasets.load_dataset(
+            "tau/commonsense_qa" if path is None else path, trust_remote_code=True
+        )["train" if is_train else "validation"]
         logging.info("Preparing data for CommonSenseQA")
         ret: List[InputData] = []
         for data_point in data:
@@ -275,6 +281,7 @@ class PubMedQA(QuestionAnswerTask):
         data = hf_datasets.load_dataset(
             "qiaojin/PubMedQA" if path is None else path,
             "pqa_artificial" if is_train else "pqa_labeled",
+            trust_remote_code=True,
         )["train"]
         logging.info("Preparing data for PubMedQA")
         ret: List[InputData] = []

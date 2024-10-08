@@ -13,8 +13,7 @@ from transformers.models.phi.modeling_phi import (
 )
 from transformers.utils import is_flash_attn_2_available
 
-from moe_peft.backends import backend
-from moe_peft.modules import (
+from moe_peft.common import (
     FeedForward,
     Linear,
     LLMAttention,
@@ -24,11 +23,13 @@ from moe_peft.modules import (
     LLMForCausalLM,
     LLMModelConfig,
     LLMModelInput,
+    collect_plugin_router_logtis,
     eager_attention_forward,
     flash_attention_forward,
     prepare_4d_causal_attention_mask,
+    slice_tensor,
 )
-from moe_peft.modules.mix_lora import _slice_tensor
+from moe_peft.executors import executor
 from moe_peft.utils import copy_parameters
 
 
@@ -253,7 +254,7 @@ class PhiFlashAttention2(PhiAttention):
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
-            if backend.is_bf16_supported():
+            if executor.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16
@@ -339,14 +340,14 @@ class PhiMLP(LLMFeedForward):
 
             lora_name = f"moe.{moe_name}.experts.{expert_idx}"
             if lora_name in self.fc1_.loras_:
-                lora_data = _slice_tensor(hidden_states, top_x, input_dtype)
+                lora_data = slice_tensor(hidden_states, top_x, input_dtype)
                 act_result = act_fn(
                     self.fc1_.loras_[lora_name].forward(
-                        _slice_tensor(common_fc1, top_x, input_dtype), lora_data
+                        slice_tensor(common_fc1, top_x, input_dtype), lora_data
                     )
                 )
             else:
-                act_result = act_fn(_slice_tensor(common_fc1, top_x, input_dtype))
+                act_result = act_fn(slice_tensor(common_fc1, top_x, input_dtype))
 
             if lora_name in self.fc2_.loras_:
                 final_expert_states.append(
@@ -407,6 +408,11 @@ class PhiDecoderLayer(LLMDecoder):
             feed_forward_outputs, self.resid_pdrop_, not input_args.inference_mode_
         )
         hidden_states = attn_outputs + feed_forward_outputs + residual
+
+        if input_args.output_router_logits_:
+            router_logits = collect_plugin_router_logtis(
+                router_logits, input_args, self
+            )
 
         return hidden_states, *router_logits
 
@@ -502,7 +508,7 @@ class PhiForCausalLM(LLMForCausalLM):
         llm_model: modeling_phi.PhiForCausalLM,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = backend.default_device_name(),
+        device: str = executor.default_device_name(),
     ):
         assert not use_sliding_window, "Phi model does not support SWA."
         llm_config: modeling_phi.PhiConfig = llm_model.config

@@ -9,8 +9,7 @@ from transformers.models.phi3 import modeling_phi3
 from transformers.models.phi3.modeling_phi3 import apply_rotary_pos_emb, repeat_kv
 from transformers.utils import is_flash_attn_2_available
 
-from moe_peft.backends import backend
-from moe_peft.modules import (
+from moe_peft.common import (
     FeedForward,
     Linear,
     LLMAttention,
@@ -20,11 +19,13 @@ from moe_peft.modules import (
     LLMForCausalLM,
     LLMModelConfig,
     LLMModelInput,
+    collect_plugin_router_logtis,
     eager_attention_forward,
     flash_attention_forward,
     prepare_4d_causal_attention_mask,
+    slice_tensor,
 )
-from moe_peft.modules.mix_lora import _slice_tensor
+from moe_peft.executors import executor
 from moe_peft.utils import copy_parameters
 
 from .modeling_gemma2 import Gemma2RotaryEmbedding as Phi3RotaryEmbedding
@@ -275,7 +276,7 @@ class Phi3FlashAttention2(Phi3Attention):
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
-            if backend.is_bf16_supported():
+            if executor.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16
@@ -368,11 +369,11 @@ class Phi3MLP(LLMFeedForward):
             lora_name = f"moe.{moe_name}.experts.{expert_idx}"
             if lora_name in self.gate_up_proj_.loras_:
                 gate_up_states = self.gate_up_proj_.loras_[lora_name].forward(
-                    _slice_tensor(common_gate_up, top_x, input_dtype),
-                    _slice_tensor(hidden_states, top_x, input_dtype),
+                    slice_tensor(common_gate_up, top_x, input_dtype),
+                    slice_tensor(hidden_states, top_x, input_dtype),
                 )
             else:
-                gate_up_states = _slice_tensor(common_gate_up, top_x, input_dtype)
+                gate_up_states = slice_tensor(common_gate_up, top_x, input_dtype)
 
             gate_states, up_states = gate_up_states.chunk(2, dim=-1)
             act_result = up_states * act_fn(gate_states)
@@ -433,6 +434,11 @@ class Phi3DecoderLayer(LLMDecoder):
         hidden_states = self.post_attention_layernorm_(hidden_states)
         hidden_states, router_logits = self.mlp_.forward(hidden_states, input_args)
         hidden_states = residual + self.resid_mlp_dropout(hidden_states)
+
+        if input_args.output_router_logits_:
+            router_logits = collect_plugin_router_logtis(
+                router_logits, input_args, self
+            )
 
         return hidden_states, *router_logits
 
@@ -511,7 +517,7 @@ class Phi3ForCausalLM(LLMForCausalLM):
         llm_model: modeling_phi3.Phi3ForCausalLM,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = backend.default_device_name(),
+        device: str = executor.default_device_name(),
     ):
         llm_config: modeling_phi3.Phi3Config = llm_model.config
         llm_args = Phi3Config(

@@ -1,9 +1,4 @@
-from .backends import backend
-from .dispatcher import Dispatcher, TrainTask
-from .evaluator import EvaluateConfig, evaluate
-from .generator import GenerateConfig, generate
-from .model import LLMModel
-from .modules import (
+from .common import (
     AdapterConfig,
     LLMBatchConfig,
     LLMCache,
@@ -12,10 +7,13 @@ from .modules import (
     LLMModelInput,
     LLMModelOutput,
     LoraConfig,
-    MixLoraConfig,
     cache_factory,
-    lora_config_factory,
 )
+from .dispatcher import Dispatcher, TrainTask
+from .evaluator import EvaluateConfig, evaluate
+from .executors import executor
+from .generator import GenerateConfig, generate
+from .model import LLMModel
 from .prompter import Prompter
 from .tokenizer import Tokenizer
 from .trainer import TrainConfig, train
@@ -38,8 +36,6 @@ __all__ = [
     "LLMModelInput",
     "AdapterConfig",
     "LoraConfig",
-    "MixLoraConfig",
-    "lora_config_factory",
     "TrainTask",
     "Dispatcher",
     "EvaluateConfig",
@@ -52,5 +48,5 @@ __all__ = [
     "Prompter",
     "Tokenizer",
     "setup_logging",
-    "backend",
+    "executor",
 ]

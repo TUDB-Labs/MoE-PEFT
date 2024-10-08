@@ -7,7 +7,13 @@ from transformers.models.mistral import modeling_mistral
 from transformers.models.qwen2 import modeling_qwen2
 from transformers.utils import is_flash_attn_2_available
 
-from moe_peft.backends import backend
+from moe_peft.common import (
+    FeedForward,
+    LLMCache,
+    LLMModelInput,
+    flash_attention_forward,
+)
+from moe_peft.executors import executor
 from moe_peft.models.modeling_llama import (
     LlamaAttention,
     LlamaConfig,
@@ -18,12 +24,6 @@ from moe_peft.models.modeling_llama import (
     LlamaRMSNorm,
     apply_rotary_pos_emb,
     repeat_kv,
-)
-from moe_peft.modules import (
-    FeedForward,
-    LLMCache,
-    LLMModelInput,
-    flash_attention_forward,
 )
 from moe_peft.utils import copy_parameters
 
@@ -128,7 +128,7 @@ class MistralFlashAttention(LlamaAttention):
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
-            if backend.is_bf16_supported():
+            if executor.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16
@@ -185,7 +185,7 @@ class MistralForCausalLM(LlamaForCausalLM):
         llm_model: modeling_mistral.MistralForCausalLM,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = backend.default_device_name(),
+        device: str = executor.default_device_name(),
     ):
         llm_config: modeling_mistral.MistralConfig = llm_model.config
         llm_args = MistralConfig(

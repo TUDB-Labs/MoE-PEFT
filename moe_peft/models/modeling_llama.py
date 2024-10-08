@@ -9,8 +9,7 @@ from transformers.models.llama import modeling_llama
 from transformers.models.llama.modeling_llama import apply_rotary_pos_emb, repeat_kv
 from transformers.utils import is_flash_attn_2_available
 
-from moe_peft.backends import backend
-from moe_peft.modules import (
+from moe_peft.common import (
     ROPE_INIT_FUNCTIONS,
     FeedForward,
     Linear,
@@ -21,11 +20,13 @@ from moe_peft.modules import (
     LLMForCausalLM,
     LLMModelConfig,
     LLMModelInput,
+    collect_plugin_router_logtis,
     eager_attention_forward,
     flash_attention_forward,
     prepare_4d_causal_attention_mask,
+    slice_tensor,
 )
-from moe_peft.modules.mix_lora import _slice_tensor
+from moe_peft.executors import executor
 from moe_peft.utils import copy_parameters
 
 
@@ -267,7 +268,7 @@ class LlamaFlashAttention(LlamaAttention):
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
-            if backend.is_bf16_supported():
+            if executor.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16
@@ -362,21 +363,21 @@ class LlamaMLP(LLMFeedForward):
 
             lora_name = f"moe.{moe_name}.experts.{expert_idx}"
             if lora_name in self.w1_.loras_:
-                lora_data = _slice_tensor(hidden_states, top_x, input_dtype)
+                lora_data = slice_tensor(hidden_states, top_x, input_dtype)
                 w1 = self.w1_.loras_[lora_name].forward(
-                    _slice_tensor(common_w1, top_x, input_dtype), lora_data
+                    slice_tensor(common_w1, top_x, input_dtype), lora_data
                 )
             else:
                 lora_data = None
-                w1 = _slice_tensor(common_w1, top_x, input_dtype)
+                w1 = slice_tensor(common_w1, top_x, input_dtype)
 
             if lora_name in self.w3_.loras_:
                 w3 = self.w3_.loras_[lora_name].forward(
-                    _slice_tensor(common_w3, top_x, input_dtype),
-                    _slice_tensor(hidden_states, top_x, input_dtype, lora_data),
+                    slice_tensor(common_w3, top_x, input_dtype),
+                    slice_tensor(hidden_states, top_x, input_dtype, lora_data),
                 )
             else:
-                w3 = _slice_tensor(common_w3, top_x, input_dtype)
+                w3 = slice_tensor(common_w3, top_x, input_dtype)
 
             act_result = act_fn(w1) * w3
             if lora_name in self.w2_.loras_:
@@ -444,6 +445,11 @@ class LlamaDecoderLayer(LLMDecoder):
         hidden_states = self.post_attention_layernorm_(hidden_states)
         hidden_states, router_logits = self.mlp_.forward(hidden_states, input_args)
         hidden_states = residual + hidden_states
+
+        if input_args.output_router_logits_:
+            router_logits = collect_plugin_router_logtis(
+                router_logits, input_args, self
+            )
 
         return hidden_states, *router_logits
 
@@ -514,7 +520,7 @@ class LlamaForCausalLM(LLMForCausalLM):
         llm_model: modeling_llama.LlamaForCausalLM,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = backend.default_device_name(),
+        device: str = executor.default_device_name(),
     ):
         assert not use_sliding_window, "Llama model does not support SWA."
         llm_config: modeling_llama.LlamaConfig = llm_model.config

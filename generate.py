@@ -22,7 +22,7 @@ def main(
     flash_attn: bool = False,
     max_seq_len: int = None,
     stream: bool = False,
-    device: str = moe_peft.backend.default_device_name(),
+    device: str = moe_peft.executor.default_device_name(),
 ):
 
     model = moe_peft.LLMModel.from_pretrained(

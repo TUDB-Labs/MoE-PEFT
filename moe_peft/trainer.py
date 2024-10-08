@@ -8,11 +8,11 @@ from typing import Dict, List, Optional, Union
 import torch
 from transformers import get_scheduler
 
-from .backends import no_cache
+from .common import LLMModelOutput, Prompt
 from .dispatcher import Dispatcher, DispatcherConfig, TrainTask
 from .evaluator import EvaluateConfig, evaluate
+from .executors import no_cache
 from .model import LLMModel
-from .modules import LLMModelOutput, Prompt
 from .prompter import Prompter
 from .tasks import BasicTask, CasualTask, MultiTask, task_dict
 from .tokenizer import Tokenizer
