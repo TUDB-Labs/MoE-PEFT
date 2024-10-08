@@ -10,7 +10,7 @@ MoE-PEFT is an open-source *LLMOps* framework built on [m-LoRA](https://github.c
 
 - Concurrent fine-tuning, evaluation, and inference of multiple adapters with a shared pre-trained model.
 
-- **MoE PEFT** optimization, mainly for [MixLoRA](https://github.com/TUDB-Labs/MixLoRA) and other MoE implementation.
+- **MoE PEFT** optimization, mainly for [MixLoRA](https://github.com/TUDB-Labs/MixLoRA) and other MoLE implementation.
 
 - Support for multiple PEFT algorithms and various pre-trained models.
 
@@ -20,14 +20,14 @@ You can try MoE-PEFT with [Google Colab](https://githubtocolab.com/TUDB-Labs/MoE
 
 ## Supported Platform
 
-| OS      | Backend | Model Precision        | Quantization  | Flash Attention |
+| OS      | Executor | Model Precision        | Quantization  | Flash Attention |
 |---------|---------|------------------------|---------------|-----------------|
 | Linux   | CUDA    | FP32, FP16, TF32, BF16 | 8bit and 4bit | &check;         |
 | Windows | CUDA    | FP32, FP16, TF32, BF16 | 8bit and 4bit | -               |
 | macOS   | MPS     | FP32, FP16, BF16       | &cross;       | &cross;         |
 | All     | CPU     | FP32, FP16, BF16       | &cross;       | &cross;         |
 
-You can use the `MOE_PEFT_BACKEND_TYPE` environment variable to force MoE-PEFT to use a specific backend. For example, if you want MoE-PEFT to run only on CPU, you can set `MOE_PEFT_BACKEND_TYPE=CPU` before importing `moe_peft`.
+You can use the `MOE_PEFT_EXECUTOR_TYPE` environment variable to force MoE-PEFT to use a specific executor. For example, if you want MoE-PEFT to run only on CPU, you can set `MOE_PEFT_EXECUTOR_TYPE=CPU` before importing `moe_peft`.
 
 ## Supported Pre-trained Models
 
@@ -54,8 +54,7 @@ You can use the `MOE_PEFT_BACKEND_TYPE` environment variable to force MoE-PEFT t
 | &check; | [MoLA](https://arxiv.org/abs/2402.08562)                 | `"routing_strategy": "mola", "num_experts": 8`            |
 | &check; | [LoRAMoE](https://arxiv.org/abs/2312.09979)              | `"routing_strategy": "loramoe", "num_experts": 8`         |
 | &check; | [MixLoRA](https://arxiv.org/abs/2404.15159)              | `"routing_strategy": "mixlora", "num_experts": 8`         |
-| &check; | MixLoRA-Switch                                           | `"routing_strategy": "mixlora-switch", "num_experts": 8`  |
-| &check; | MixLoRA-Dynamic                                          | `"routing_strategy": "mixlora-dynamic", "num_experts": 8` |
+| &check; | [LoRA](https://arxiv.org/abs/2106.09685)                 | `"r": 8, "lora_alpha": 16, "lora_dropout": 0.05`          |
 | &check; | [QLoRA](https://arxiv.org/abs/2402.12354)                | See *Quantize Methods*                                    |
 | &check; | [LoRA+](https://arxiv.org/abs/2402.12354)                | `"loraplus_lr_ratio": 20.0`                               |
 | &check; | [DoRA](https://arxiv.org/abs/2402.09353)                 | `"use_dora": true`                                        |

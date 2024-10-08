@@ -38,7 +38,7 @@ then enter the following code:
 ```python
 import moe_peft
 moe_peft.setup_logging("INFO")
-moe_peft.backend.check_available()
+moe_peft.executor.check_available()
 ```
 
 Expected output:
@@ -88,7 +88,7 @@ then enter the following code:
 ```python
 import moe_peft
 moe_peft.setup_logging("INFO")
-moe_peft.backend.check_available()
+moe_peft.executor.check_available()
 ```
 
 Expected output:
@@ -138,7 +138,7 @@ then enter the following code:
 ```python
 import moe_peft
 moe_peft.setup_logging("INFO")
-moe_peft.backend.check_available()
+moe_peft.executor.check_available()
 ```
 
 Expected output:
@@ -183,7 +183,7 @@ then enter the following code:
 ```python
 import moe_peft
 moe_peft.setup_logging("INFO")
-moe_peft.backend.check_available()
+moe_peft.executor.check_available()
 ```
 
 Expected output:

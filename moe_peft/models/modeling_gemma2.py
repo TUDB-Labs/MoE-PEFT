@@ -7,10 +7,7 @@ from transformers.models.gemma2 import modeling_gemma2
 from transformers.models.gemma2.modeling_gemma2 import apply_rotary_pos_emb, repeat_kv
 from transformers.utils import is_flash_attn_2_available
 
-from moe_peft.backends import backend
-from moe_peft.models.modeling_gemma import GemmaEmbedding, GemmaRMSNorm
-from moe_peft.models.modeling_llama import LlamaMLP
-from moe_peft.modules import (
+from moe_peft.common import (
     FeedForward,
     Linear,
     LLMAttention,
@@ -19,9 +16,13 @@ from moe_peft.modules import (
     LLMForCausalLM,
     LLMModelConfig,
     LLMModelInput,
+    collect_plugin_router_logtis,
     flash_attention_forward,
     prepare_4d_causal_attention_mask,
 )
+from moe_peft.executors import executor
+from moe_peft.models.modeling_gemma import GemmaEmbedding, GemmaRMSNorm
+from moe_peft.models.modeling_llama import LlamaMLP
 from moe_peft.utils import copy_parameters, is_package_available
 
 
@@ -253,7 +254,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
-            if backend.is_bf16_supported():
+            if executor.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16
@@ -359,6 +360,11 @@ class Gemma2DecoderLayer(LLMDecoder):
         hidden_states = self.post_feedforward_layernorm_(hidden_states)
         hidden_states = residual + hidden_states
 
+        if input_args.output_router_logits_:
+            router_logits = collect_plugin_router_logtis(
+                router_logits, input_args, self
+            )
+
         return hidden_states, *router_logits
 
 
@@ -443,7 +449,7 @@ class Gemma2ForCausalLM(LLMForCausalLM):
         llm_model: modeling_gemma2.Gemma2PreTrainedModel,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = backend.default_device_name(),
+        device: str = executor.default_device_name(),
     ):
         llm_config: modeling_gemma2.Gemma2Config = llm_model.config
         model_config = Gemma2Config(

@@ -72,7 +72,7 @@ def main(
     load_8bit: bool = False,
     load_4bit: bool = False,
     flash_attn: bool = False,
-    device: str = moe_peft.backend.default_device_name(),
+    device: str = moe_peft.executor.default_device_name(),
     server_name: str = "0.0.0.0",
     share_gradio: bool = False,
 ):

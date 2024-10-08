@@ -6,7 +6,7 @@ import datasets as hf_datasets
 import evaluate as hf_evaluate
 import torch
 
-from moe_peft.modules import InputData, Prompt
+from moe_peft.common import InputData, Prompt
 
 
 class BasicMetric:

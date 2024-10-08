@@ -263,7 +263,7 @@ def do_evaluate(
     model_dtype: str,
     adapter_names: List[str],
     batch_size: int = 2,
-    device: str = moe_peft.backend.default_device_name(),
+    device: str = moe_peft.executor.default_device_name(),
     output: str = "mmlu_scores.csv",
 ):
     tokenizer = moe_peft.Tokenizer(model_name)
@@ -301,9 +301,9 @@ def do_evaluate(
 
 
 def main(config: str):
-    moe_peft.backend.manual_seed(66)
+    moe_peft.executor.manual_seed(66)
     moe_peft.setup_logging("INFO")
-    if not moe_peft.backend.check_available():
+    if not moe_peft.executor.check_available():
         exit(-1)
     with open(config, "r", encoding="utf8") as fp:
         mmlu_config = json.load(fp)

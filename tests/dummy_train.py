@@ -14,7 +14,7 @@ def main(
 
     model: moe_peft.LLMModel = moe_peft.LLMModel.from_pretrained(
         base_model,
-        device=moe_peft.backend.default_device_name(),
+        device=moe_peft.executor.default_device_name(),
         load_dtype=torch.bfloat16,
     )
     tokenizer = moe_peft.Tokenizer(base_model)
@@ -41,7 +41,7 @@ def main(
         learning_rate=1e-4,
     )
 
-    with moe_peft.backends.no_cache():
+    with moe_peft.executors.no_cache():
         model.init_adapter(lora_config)
         moe_peft.train(model=model, tokenizer=tokenizer, configs=[train_config])
         lora_config, lora_weight = model.unload_adapter(adapter_name)
@@ -59,7 +59,7 @@ def main(
         ),
     ]
 
-    with moe_peft.backends.no_cache():
+    with moe_peft.executors.no_cache():
         model.init_adapter(lora_config, lora_weight)
         model.init_adapter(moe_peft.AdapterConfig(adapter_name="default"))
         outputs = moe_peft.generate(
