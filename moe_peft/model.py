@@ -672,7 +672,9 @@ class LLMModel(torch.nn.Module):
             lora_config = lora_config_factory(json.load(fp))
         lora_config.adapter_name = adapter_name
         lora_weight = torch.load(
-            name_or_path + os.sep + "adapter_model.bin", map_location=self.device_
+            name_or_path + os.sep + "adapter_model.bin",
+            map_location=self.device_,
+            weights_only=False,
         )
 
         self.init_adapter(lora_config, lora_weight)
