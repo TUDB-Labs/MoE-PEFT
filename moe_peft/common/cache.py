@@ -11,11 +11,11 @@ from .config import LLMModelConfig
 class DynamicCache(LLMCache):
     def __init__(self, **kwargs) -> None:
         super().__init__()
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
         self._seen_tokens = (
             0  # Used in `generate` to keep tally of how many tokens the cache has seen
         )
+        self.key_cache: List[torch.Tensor] = []
+        self.value_cache: List[torch.Tensor] = []
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
@@ -57,8 +57,17 @@ class DynamicCache(LLMCache):
 
         # Update the cache
         if len(self.key_cache) <= layer_idx:
+            # There may be skipped layers, fill them with empty lists
+            for _ in range(len(self.key_cache), layer_idx):
+                self.key_cache.append([])
+                self.value_cache.append([])
             self.key_cache.append(key_states)
             self.value_cache.append(value_states)
+        elif (
+            len(self.key_cache[layer_idx]) == 0
+        ):  # fills previously skipped layers; checking for tensor causes errors
+            self.key_cache[layer_idx] = key_states
+            self.value_cache[layer_idx] = value_states
         else:
             self.key_cache[layer_idx] = torch.cat(
                 [self.key_cache[layer_idx], key_states], dim=-2
@@ -72,9 +81,16 @@ class DynamicCache(LLMCache):
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # TODO: deprecate this function in favor of `cache_position`
-        if len(self.key_cache) <= layer_idx:
-            return 0
-        return self.key_cache[layer_idx].shape[-2]
+        is_empty_layer = (
+            len(self.key_cache) == 0  # no cache in any layer
+            or len(self.key_cache)
+            <= layer_idx  # skipped `layer_idx` and hasn't run a layer with cache after it
+            or len(self.key_cache[layer_idx]) == 0  # the layer has no cache
+        )
+        layer_seq_length = (
+            self.key_cache[layer_idx].shape[-2] if not is_empty_layer else 0
+        )
+        return layer_seq_length
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
@@ -93,8 +109,9 @@ class DynamicCache(LLMCache):
 
         self._seen_tokens = max_length
         for idx in range(len(self.key_cache)):
-            self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
-            self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
+            if self.key_cache[idx] != []:
+                self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
+                self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
     def batch_split(
         self, full_batch_size: int, split_size: int
@@ -120,13 +137,20 @@ class DynamicCache(LLMCache):
         `generation.utils`"""
         cache = cls()
         for idx in range(len(splits[0])):
-            layer_keys = torch.cat(
-                [current.key_cache[idx] for current in splits], dim=0
-            )
-            layer_values = torch.cat(
-                [current.value_cache[idx] for current in splits], dim=0
-            )
-            cache.update(layer_keys, layer_values, idx)
+            key_cache = [
+                current.key_cache[idx]
+                for current in splits
+                if current.key_cache[idx] != []
+            ]
+            value_cache = [
+                current.key_cache[idx]
+                for current in splits
+                if current.key_cache[idx] != []
+            ]
+            if key_cache != []:
+                layer_keys = torch.cat(key_cache, dim=0)
+                layer_values = torch.cat(value_cache, dim=0)
+                cache.update(layer_keys, layer_values, idx)
         return cache
 
     def batch_repeat_interleave(self, repeats: int):
@@ -150,26 +174,27 @@ class StaticCache(LLMCache):
     def __init__(
         self,
         config: LLMModelConfig,
-        max_batch_size: int,
+        batch_size: int,
         max_cache_len: int,
-        device,
-        dtype=None,
+        device: torch.device,
+        dtype: torch.dtype = torch.float32,
     ) -> None:
         super().__init__()
-        self.max_batch_size = max_batch_size
+        self.batch_size = batch_size
         self.max_cache_len = (
             config.max_seq_len_ if max_cache_len is None else max_cache_len
         )
+
         self.head_dim = config.head_dim_
 
-        self.dtype = dtype if dtype is not None else torch.float32
+        self.dtype = dtype
         self.num_key_value_heads = config.n_kv_heads_
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         # Note: There will be significant perf decrease if switching to use 5D tensors instead.
         cache_shape = (
-            max_batch_size,
+            self.batch_size,
             self.num_key_value_heads,
             self.max_cache_len,
             self.head_dim,
@@ -209,31 +234,8 @@ class StaticCache(LLMCache):
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
-        It is VERY important to index using a tensor, otherwise you introduce a copy to the device.
-
-        Parameters:
-            key_states (`torch.Tensor`):
-                The new key states to cache.
-            value_states (`torch.Tensor`):
-                The new value states to cache.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache subclass. The `StaticCache` needs the `cache_position` input
-                to know how where to write in the cache.
-
-        Return:
-            A tuple containing the updated key and value states.
-        """
         cache_position = cache_kwargs.get("cache_position")
-        self.key_cache[layer_idx] = self.key_cache[layer_idx].to(
-            device=key_states.device
-        )
-        self.value_cache[layer_idx] = self.value_cache[layer_idx].to(
-            device=value_states.device
-        )
+
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 
@@ -277,10 +279,10 @@ class SlidingWindowCache(StaticCache):
     def __init__(
         self,
         config: LLMModelConfig,
-        max_batch_size: int,
+        batch_size: int,
         max_cache_len: int,
-        device,
-        dtype=None,
+        device: torch.device,
+        dtype: torch.dtype = torch.float32,
     ) -> None:
         super().__init__()
         if not hasattr(config, "sliding_window_") or config.sliding_window_ is None:
@@ -292,7 +294,7 @@ class SlidingWindowCache(StaticCache):
         max_cache_len = min(config.sliding_window_, max_cache_len)
         super().__init__(
             config=config,
-            max_batch_size=max_batch_size,
+            batch_size=batch_size,
             max_cache_len=max_cache_len,
             device=device,
             dtype=dtype,
@@ -331,7 +333,6 @@ class SlidingWindowCache(StaticCache):
         v_out = v_out[:, :, indices]
 
         try:
-            cache_position.to(device=k_out.device)
             k_out.index_copy_(2, cache_position, key_states)
             v_out.index_copy_(2, cache_position, value_states)
         except NotImplementedError:
@@ -363,10 +364,10 @@ class HybridCache(LLMCache):
     def __init__(
         self,
         config: LLMModelConfig,
-        max_batch_size,
-        max_cache_len,
-        device="cpu",
-        dtype=None,
+        batch_size: int,
+        max_cache_len: int,
+        device: torch.device,
+        dtype: torch.dtype = torch.float32,
     ) -> None:
         super().__init__()
         if not hasattr(config, "sliding_window_") or config.sliding_window_ is None:
@@ -376,10 +377,10 @@ class HybridCache(LLMCache):
                 "config and it's not set to None."
             )
         self.max_cache_len = max_cache_len
-        self.max_batch_size = max_batch_size
+        self.batch_size = batch_size
         self.head_dim = config.head_dim_
 
-        self.dtype = dtype if dtype is not None else torch.float32
+        self.dtype = dtype
         self.num_key_value_heads = config.n_kv_heads_
         self.is_sliding = torch.tensor(
             [not bool(i % 2) for i in range(config.n_layers_)],
@@ -389,13 +390,13 @@ class HybridCache(LLMCache):
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         global_cache_shape = (
-            max_batch_size,
+            self.batch_size,
             self.num_key_value_heads,
             max_cache_len,
             self.head_dim,
         )
         sliding_cache_shape = (
-            max_batch_size,
+            self.batch_size,
             self.num_key_value_heads,
             min(config.sliding_window_, max_cache_len),
             self.head_dim,
@@ -482,12 +483,6 @@ class HybridCache(LLMCache):
     ) -> Tuple[torch.Tensor]:
         cache_position = cache_kwargs.get("cache_position")
         sliding_window = cache_kwargs.get("sliding_window")
-        self.key_cache[layer_idx] = self.key_cache[layer_idx].to(
-            device=key_states.device
-        )
-        self.value_cache[layer_idx] = self.value_cache[layer_idx].to(
-            device=value_states.device
-        )
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
         if sliding_window:
@@ -511,7 +506,15 @@ class HybridCache(LLMCache):
         return self.max_cache_len
 
     def get_seq_length(self, layer_idx: Optional[int] = 0):
-        return None
+        # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
+        # limit the check to the first batch member and head dimension.
+        # TODO: deprecate this function in favor of `cache_position`
+        if layer_idx != 0:
+            raise ValueError(
+                "`get_seq_length` on `HybridCache` may get inconsistent results depending on the layer index. "
+                "Using the `layer_idx` argument is not supported."
+            )
+        return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
 
     def reset(self):
         """Resets the cache values while preserving the objects"""
@@ -532,7 +535,7 @@ cache_dict = {
 def cache_factory(
     cache_implementation: str,
     config: LLMModelConfig,
-    max_batch_size: int,
+    batch_size: int,
     max_cache_len: int,
 ):
     assert (
@@ -544,7 +547,7 @@ def cache_factory(
         max_cache_len = min(config.sliding_window_, max_cache_len)
     return cache_dict[cache_implementation](
         config=config,
-        max_batch_size=max_batch_size,
+        batch_size=batch_size,
         max_cache_len=max_cache_len,
         device=config.device_,
         dtype=config.dtype_,

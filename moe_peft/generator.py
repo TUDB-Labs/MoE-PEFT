@@ -305,7 +305,7 @@ def _batch_generate(
         cache_factory(
             cache_implementation=cache_implementation,
             config=model.model_.model_config(),
-            max_batch_size=batch_size,
+            batch_size=batch_size,
             max_cache_len=total_len,
         )
         if cache_implementation is not None
