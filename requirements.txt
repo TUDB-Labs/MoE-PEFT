@@ -1,14 +1,14 @@
-torch>=2.3.0,<2.5.0
+torch>=2.4.0,<2.6.0
 datasets
 evaluate
 accelerate
-transformers>=4.44.0,<4.46.0
+transformers>=4.44.0,<4.47.0
 sentencepiece
 huggingface_hub
 scikit-learn
 tiktoken
 mixlora>=0.2.2,<0.3.0
-gradio==4.38.1
+gradio
 peft==0.11.1
 pandas
 fire
