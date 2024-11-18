@@ -69,12 +69,12 @@ def main(
             max_gen_len=128,
         )
 
-    print(f"\n{'='*10}\n")
+    print(f"\n{'=' * 10}\n")
     print(f"PROMPT: {test_prompt}\n")
     for adapter_name, output in outputs.items():
         print(f"{adapter_name} OUTPUT:")
         print(f"{output[0]}\n")
-    print(f"\n{'='*10}\n")
+    print(f"\n{'=' * 10}\n")
 
 
 if __name__ == "__main__":
