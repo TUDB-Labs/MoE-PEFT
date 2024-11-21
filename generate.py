@@ -56,9 +56,9 @@ def main(
     )
 
     for prompt in output[adapter_name]:
-        print(f"\n{'='*10}\n")
+        print(f"\n{'=' * 10}\n")
         print(prompt)
-        print(f"\n{'='*10}\n")
+        print(f"\n{'=' * 10}\n")
 
 
 if __name__ == "__main__":

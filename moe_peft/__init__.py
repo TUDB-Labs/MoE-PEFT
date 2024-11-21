@@ -1,3 +1,4 @@
+from .adapters import adapter_factory
 from .common import (
     AdapterConfig,
     LLMBatchConfig,
@@ -36,6 +37,7 @@ __all__ = [
     "LLMModelInput",
     "AdapterConfig",
     "LoraConfig",
+    "adapter_factory",
     "TrainTask",
     "Dispatcher",
     "EvaluateConfig",

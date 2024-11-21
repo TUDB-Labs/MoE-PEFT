@@ -2,11 +2,12 @@ import fire
 import torch
 
 import moe_peft
+import moe_peft.adapters
 
 
 def main(
     base_model: str = "TinyLlama/TinyLlama_v1.1",
-    adapter_name: str = "lora_0",
+    adapter_name: str = "mixlora_0",
     train_data: str = "TUDB-Labs/Dummy-MoE-PEFT",
     test_prompt: str = "Could you provide an introduction to MoE-PEFT?",
     save_path: str = None,
@@ -21,17 +22,18 @@ def main(
     tokenizer = moe_peft.Tokenizer(base_model)
 
     lora_config = moe_peft.adapter_factory(
-        peft_type="LORA",
+        peft_type="MIXLORA",
         adapter_name=adapter_name,
         r=8,
         lora_alpha=16,
         lora_dropout=0.05,
         target_modules=[
-            "q_proj",
-            "k_proj",
-            "v_proj",
-            "o_proj",
+            "up_proj",
+            "down_proj",
+            "gate_proj",
         ],
+        routing_strategy="mixlora",
+        num_experts=6,
     )
 
     train_config = moe_peft.TrainConfig(
