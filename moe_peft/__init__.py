@@ -18,6 +18,7 @@ from .prompter import Prompter
 from .tokenizer import Tokenizer
 from .trainer import TrainConfig, train
 from .utils import is_package_available, setup_logging
+from .analyst import process
 
 assert is_package_available("torch", "2.3.0"), "MoE-PEFT requires torch>=2.3.0"
 assert is_package_available(
@@ -49,4 +50,5 @@ __all__ = [
     "Tokenizer",
     "setup_logging",
     "executor",
+    "process",
 ]

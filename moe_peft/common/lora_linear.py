@@ -97,12 +97,12 @@ class LoraFunction(torch.autograd.Function):
     @staticmethod
     def forward(
         ctx,
-        result: torch.Tensor,
-        data: torch.Tensor,
+        result: torch.Tensor,  # residual
+        data: torch.Tensor,  # hidden_states
         input_args: LLMModelInput,
         dropouts: List[float],
         scalings: List[float],
-        *args,
+        *args,  # LoRAs
     ):
         # the lora module is f32 precision
         data = data.to(torch.float32)
@@ -284,7 +284,7 @@ class Lora(nn.Module):
             and isinstance(lora_tensor[1], torch.Tensor)
         )
 
-        if lora_tensor == (None, None):
+        if lora_tensor == (None, None):  # 训练时初始化权重
             if self.initializer_ == "original":
                 nn.init.kaiming_uniform_(self.lora_a_.weight, a=math.sqrt(5))
             elif self.initializer_ == "gaussian":
@@ -292,7 +292,7 @@ class Lora(nn.Module):
             else:
                 raise ValueError(f"Unknown initialization {self.initializer_}")
             nn.init.zeros_(self.lora_b_.weight)
-        else:
+        else:  # 推理时加载现有权重
             with torch.no_grad():
                 self.lora_a_.weight.copy_(lora_tensor[0])
                 self.lora_b_.weight.copy_(lora_tensor[1])
@@ -367,7 +367,7 @@ class Linear(nn.Module):
                 self.device_,
             )
 
-        self.loras_[adapter_name].reset_parameters(lora_tensor)
+        self.loras_[adapter_name].reset_parameters(lora_tensor)  # lora_tensor即为lora_a & lora_b元组
 
     def _appy_dora(
         self,
@@ -401,7 +401,7 @@ class Linear(nn.Module):
 
         return next_states
 
-    def _efficient_impl(
+    def _efficient_impl(  # hidden_states过了预训练linear之后成为residual，获取LoRA a&b，进入lora_forward进行下一步计算
         self, hidden_states: torch.Tensor, input_args: LLMModelInput
     ) -> torch.Tensor:
         # hidden_states shape is: batch_size * max_seq_len * dim
@@ -447,7 +447,7 @@ class Linear(nn.Module):
                 residual.to(torch.float32), lora_delta, input_args
             )
         else:
-            next_states = LoraFunction.apply(
+            next_states = LoraFunction.apply(  # apply=调用forward方法
                 residual.to(torch.float32),
                 hidden_states.to(torch.float32),
                 input_args,

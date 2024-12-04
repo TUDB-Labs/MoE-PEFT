@@ -47,7 +47,7 @@ class CasualOutputLayer(LLMOutput):
     def __init__(self, vocab_size: int, weight: torch.nn.Linear):
         super().__init__()
         self.vocab_size_: int = vocab_size
-        self.lm_head_: torch.nn.Module = weight
+        self.lm_head_: torch.nn.Module = weight  # 输出层加载预训练权重
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
         return self.lm_head_(data).float()
@@ -162,7 +162,7 @@ class OutputLayer(torch.nn.Module):
         return outputs
 
 
-def init_lora_layer_weight(
+def init_lora_layer_weight(  # 将LoRA weight attach到不同的线性层上
     transformer_layer: LLMDecoder,
     llm_config: LLMModelConfig,
     lora_config: LoraConfig,
@@ -188,7 +188,7 @@ def init_lora_layer_weight(
         moe_layer_name_list = list(all_state_dict.keys())
         moe_init_strategy = "plugin"
     else:
-        model_prefix_name = "base_model.model.model"
+        model_prefix_name = "base_model.model.model"  # lora_weight格式
         moe_layer_name_list = []
 
     assert len(moe_layer_name_list) == 0 or moe_init_strategy in ["plugin", "fused_mlp"]
@@ -207,6 +207,7 @@ def init_lora_layer_weight(
             ),
         )
 
+    # 该循环遍历所有使用lora微调的线性层，将lora weight attach到对应的线性层上
     for proj_name, lora_linear in all_state_dict.items():
         lora_linear: Linear
         if proj_name not in target_modules or not target_modules[proj_name]:
@@ -251,10 +252,10 @@ def init_lora_layer_weight(
                 lora_a = None
                 lora_b = None
             else:
-                lora_a = lora_weights.get(f"{module_name}.lora_A.weight", None)
+                lora_a = lora_weights.get(f"{module_name}.lora_A.weight", None)  # lora_weight为 parameter container类，用.get()取值
                 lora_b = lora_weights.get(f"{module_name}.lora_B.weight", None)
 
-            lora_linear.init_lora_weight(lora_config, (lora_a, lora_b))
+            lora_linear.init_lora_weight(lora_config, (lora_a, lora_b))  # 初始化lora_linear，传入config和lora_a&b元组
 
 
 def get_lora_layer_weight(
@@ -429,7 +430,7 @@ class LLMModel(torch.nn.Module):
 
         for decoder_layer in self.model_.decoder_stack():
             hidden_states, *router_logits = gradient_checkpoint(
-                decoder_layer.forward,
+                decoder_layer.forward,  # 进入decoder_layer
                 hidden_states,
                 input_args,
                 rotary_emb,
@@ -470,7 +471,7 @@ class LLMModel(torch.nn.Module):
             hidden_states, cache_position.unsqueeze(0)
         )
 
-        hidden_states, all_router_logits = self._call_decoder_stack(
+        hidden_states, all_router_logits = self._call_decoder_stack(  # 正式call decoder stack  
             hidden_states,
             input_args,
             rotary_emb,
@@ -584,7 +585,7 @@ class LLMModel(torch.nn.Module):
         return LLMModel(model)
 
     def init_adapter(
-        self, config: AdapterConfig, weight: Optional[Dict[str, torch.Tensor]] = None
+        self, config: AdapterConfig, weight: Optional[Dict[str, torch.Tensor]] = None  # 目前来看传入的weight是lora weight
     ):
         # Patch for MixLoRA
         if isinstance(config, MixLoraConfig) and config.act_fn_ is None:
@@ -595,7 +596,7 @@ class LLMModel(torch.nn.Module):
         if config.task_name in task_dict and isinstance(
             task_dict[config.task_name], SequenceClassificationTask
         ):
-            output_layer = ClassificationOutputLayer(
+            output_layer = ClassificationOutputLayer( # 输出层，包含lora_weight
                 **task_dict[config.task_name].init_kwargs(),
                 hidden_size=self.config_.dim_,
                 pad_token_id=self.config_.pad_token_id_,
@@ -604,14 +605,14 @@ class LLMModel(torch.nn.Module):
             )
         else:
             output_layer = CasualOutputLayer(
-                vocab_size=self.config_.vocab_size_, weight=self.model_.lm_head_
+                vocab_size=self.config_.vocab_size_, weight=self.model_.lm_head_  # 此处加载预训练权重
             )
 
         self.output_.layers_[config.adapter_name] = output_layer
         if type(config) is not AdapterConfig:
-            # init transformer layers
+            # init transformer layers 该循环遍历所有TransformerLayer，加载微调参数
             for transformer_layer in self.model_.layers_:
-                init_lora_layer_weight(transformer_layer, self.config_, config, weight)
+                init_lora_layer_weight(transformer_layer, self.config_, config, weight)  # LoRA weight
         else:
             assert weight is None, "can not load basic adapter with weight"
 
@@ -671,11 +672,12 @@ class LLMModel(torch.nn.Module):
         ) as fp:
             lora_config = lora_config_factory(json.load(fp))
         lora_config.adapter_name = adapter_name
-        lora_weight = torch.load(
+        lora_weight = torch.load(  #此处加载微调后的lora权重
             name_or_path + os.sep + "adapter_model.bin",
             map_location=self.device_,
             weights_only=False,
         )
+        print(lora_weight.keys())
 
         self.init_adapter(lora_config, lora_weight)
         return adapter_name

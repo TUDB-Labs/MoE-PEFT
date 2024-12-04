@@ -1,0 +1,35 @@
+[
+    [  # layer 0
+        {"wq": tensor},
+        {"wk": tensor},
+        {"wv": tensor},
+        {"wo": tensor},
+        {"w1": tensor},
+        {"w2": tensor},
+        {"w3": tensor}
+    ],
+    [  # layer 1
+        {"wq": tensor},
+        {"wk": tensor},
+        {"wv": tensor},
+        {"wo": tensor},
+        {"w1": tensor},
+        {"w2": tensor},
+        {"w3": tensor}
+    ]，
+    [  # layer 2
+        {"wq": tensor},
+        {"wk": tensor},
+        {"wv": tensor},
+        {"wo": tensor},
+        {"w1": tensor},
+        {"w2": tensor},
+        {"w3": tensor}
+    ]，
+    ...
+]
+
+[
+    {'arc_c_lora': ['wq', 'wk', 'wv', 'w1', 'w2', 'w3']},
+    {'arc_c_dora': ['wq', 'wk', 'wo', 'w1', 'w2', 'w3']}
+]

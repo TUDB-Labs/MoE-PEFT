@@ -327,7 +327,7 @@ def _batch_generate(
             batch_tokens_=tokens[:, prev_pos:cur_pos].tolist(),
             inference_mode_=True,
         )
-        outputs = model.forward(input_data, past_key_values)
+        outputs = model.forward(input_data, past_key_values)  # 推理核心过程
         for output in outputs:
             config = config_dict[output.adapter_name]
             start_idx = output.batch_start_idx_

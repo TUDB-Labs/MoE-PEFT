@@ -36,6 +36,7 @@ def compose_command(
     quantize: str = None,
     dtype: str = "bf16",
     tf32: bool = False,
+    svd_ana: bool = False,
 ):
     assert quantize in (None, "4bit", "8bit")
     assert dtype in ("fp32", "fp16", "bf16")
@@ -66,6 +67,8 @@ def compose_command(
         command += f" --{dtype}"
     if tf32:
         command += " --tf32"
+    if svd_ana:
+        command += " --svd_ana"
     return os.system(command)
 
 
