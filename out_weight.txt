@@ -1,3 +1,36 @@
+# out_weights
+[
+    [  # layer 0
+        {"wq": cosine_similarity},
+        {"wk": cosine_similarity},
+        {"wv": cosine_similarity},
+        {"wo": cosine_similarity},
+        {"w1": cosine_similarity},
+        {"w2": cosine_similarity},
+        {"w3": cosine_similarity}
+    ],
+    [  # layer 1
+        {"wq": cosine_similarity},
+        {"wk": cosine_similarity},
+        {"wv": cosine_similarity},
+        {"wo": cosine_similarity},
+        {"w1": cosine_similarity},
+        {"w2": cosine_similarity},
+        {"w3": cosine_similarity}
+    ]，
+    [  # layer 2
+        {"wq": cosine_similarity},
+        {"wk": cosine_similarity},
+        {"wv": cosine_similarity},
+        {"wo": cosine_similarity},
+        {"w1": cosine_similarity},
+        {"w2": cosine_similarity},
+        {"w3": cosine_similarity}
+    ]，
+    ...
+]
+
+# out_weights
 [
     [  # layer 0
         {"wq": tensor},
@@ -28,6 +61,11 @@
     ]，
     ...
 ]
+
+
+
+
+
 
 [
     {'arc_c_lora': ['wq', 'wk', 'wv', 'w1', 'w2', 'w3']},

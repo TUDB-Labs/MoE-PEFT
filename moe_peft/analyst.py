@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+from typing import Tuple, Dict
 from sklearn.metrics.pairwise import cosine_similarity
 
 def keys_extraction(config) -> list:
@@ -32,123 +33,87 @@ def mapping(keys_list) -> list:
 
     return mapped_list
 
-def traverse(model, target_linears_list):
+def weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
     attn_linears = ['wq_', 'wk_', 'wv_', 'wo_']
     mlp_linears = ['w1_', 'w2_', 'w3_']
+    
+    pretrained_layers_weights = []
+    tuned_layers_weights = []
 
-    for layer in model.model_.layers_:  # Decoder Layer
-        for item in target_linears_list:  # 含adapter_name
-            for adapter_name, linear_lst in item.items():  # 键值分离
+    for layer in model.model_.layers_:  
+        pretrained_layer_weights = []
+        tuned_layer_weights = []
+        for item in target_linears_list:
+            for adapter_name, linear_lst in item.items():
                 for linear in linear_lst:
                     if linear in attn_linears:
-                        loras_dict = getattr(layer.self_attn_, linear).loras_
-                        adapter = loras_dict.get(adapter_name, None)
-                        if adapter is not None:
-                            p_weight = getattr(adapter, 'base_layer_').weight
-                            lora_a_weight = getattr(adapter, 'lora_a_').weight
-                            lora_b_weight = getattr(adapter, 'lora_b_').weight
-                            t_weight = lora_b_weight @ lora_a_weight + p_weight
-                            svd_analysis(p_weight, t_weight, n=9)
-
+                        try:
+                            loras_dict = getattr(layer.self_attn_, linear).loras_
+                            adapter = loras_dict.get(adapter_name, None)
+                            
+                            if adapter is not None:
+                                p_weight = getattr(adapter, 'base_layer_').weight
+                                lora_a_weight = getattr(adapter, 'lora_a_').weight
+                                lora_b_weight = getattr(adapter, 'lora_b_').weight
+                                t_weight = lora_b_weight @ lora_a_weight + p_weight
+                                
+                                linear_key = linear.rstrip('_')
+                                pretrained_layer_weights.append({linear_key: p_weight})
+                                tuned_layer_weights.append({linear_key: t_weight})
+                        except AttributeError as e:
+                            raise AttributeError(f"Error accessing attributes for linear '{linear}' in adapter '{adapter_name}': {e}")
+                    
                     elif linear in mlp_linears:
-                        loras_dict = getattr(layer.mlp_.mlp_, linear).loras_
-                        adapter = loras_dict.get(adapter_name, None)
-                        if adapter is not None:
-                            p_weight = getattr(adapter, 'base_layer_').weight
-                            lora_a_weight = getattr(adapter, 'lora_a_').weight
-                            lora_b_weight = getattr(adapter, 'lora_b_').weight
-                            t_weight = lora_b_weight @ lora_a_weight + p_weight
-                            svd_analysis(p_weight, t_weight, n=9)
+                        try:
+                            loras_dict = getattr(layer.mlp_.mlp_, linear).loras_
+                            adapter = loras_dict.get(adapter_name, None)
+                            
+                            if adapter is not None:
+                                p_weight = getattr(adapter, 'base_layer_').weight
+                                lora_a_weight = getattr(adapter, 'lora_a_').weight
+                                lora_b_weight = getattr(adapter, 'lora_b_').weight
+                                t_weight = lora_b_weight @ lora_a_weight + p_weight
+                                
+                                linear_key = linear.rstrip('_')
+                                pretrained_layer_weights.append({linear_key: p_weight})
+                                tuned_layer_weights.append({linear_key: t_weight})
+                        except AttributeError as e:
+                            raise AttributeError(f"Error accessing attributes for linear '{linear}' in adapter '{adapter_name}': {e}")
+                    
                     else:
                         raise ValueError(f"Invalid linear name: {linear}")
+        
+        pretrained_layers_weights.append(pretrained_layer_weights)
+        tuned_layers_weights.append(tuned_layer_weights)
 
-def svd_analysis(p_weight: list, f_weight: list, n: int=9):
-    logging.info("Start SVD analysis...")
-    for p_point, f_point in zip(p_weight, f_weight):
-        # Perform SVD on pre-training weight matrix
-        U_p, Sigma_p, Vt_p = np.linalg.svd(p_point, full_matrices=False)
-        
-        # Perform SVD on fine-tuning weight matrix
-        U_f, Sigma_f, Vt_f = np.linalg.svd(f_point, full_matrices=False)
-        
-        # Calculate cosine similarity between corresponding singular vectors in U
-        cosine_sim_U = [cosine_similarity(U_p[:, i].reshape(1, -1), U_f[:, i].reshape(1, -1))[0, 0]
-                        for i in range(min(U_p.shape[1], U_f.shape[1]))]
-        
-        # Calculate cosine similarity between corresponding singular vectors in V
-        cosine_sim_V = [cosine_similarity(Vt_p[i, :].reshape(1, -1), Vt_f[i, :].reshape(1, -1))[0, 0]
-                        for i in range(min(Vt_p.shape[0], Vt_f.shape[0]))]
-        
-        # Display results
-        print("Cosine similarity of left singular vectors (U):", cosine_sim_U)
-        print("Cosine similarity of right singular vectors (V):", cosine_sim_V)
-        print("Singular values of pre-training matrix (Sigma_p):", Sigma_p)
-        print("Singular values of fine-tuning matrix (Sigma_f):", Sigma_f)
+    return pretrained_layers_weights, tuned_layers_weights
+
+
+def svd_analysis(p_weights: list, f_weights: list, n: int = 9):
+    results = []
+
+    for layer_idx, (p_layer, f_layer) in enumerate(zip(p_weights, f_weights)):
+        layer_results = []
+        for key in p_layer.keys():
+            p_tensor = np.array(p_layer[key])
+            f_tensor = np.array(f_layer[key])
+            
+            p_u, _, _ = np.linalg.svd(p_tensor, full_matrices=False)
+            f_u, _, _ = np.linalg.svd(f_tensor, full_matrices=False)
+            
+            p_top_n = p_u[:, :n]
+            f_top_n = f_u[:, :n]
+            
+            similarity = cosine_similarity(p_top_n.T, f_top_n.T)
+            avg_similarity = np.mean(similarity)
+            
+            layer_results.append({key: avg_similarity})
+        results.append(layer_results)
     
-    return np.array(cosine_sim_U), np.array(cosine_sim_V), Sigma_p, Sigma_f
+    return results
 
 
 # Function to perform SVD and calculate cosine similarity between singular vectors
 def process(model, config):
     ft_inform = mapping(keys_extraction(config))
-    traverse(model, ft_inform)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-# import json
-# import logging
-# import torch
-# import numpy as np
-
-# def cosine_similarity(vec1, vec2):
-#     dot_product = torch.dot(vec1, vec2)
-#     norm_vec1 = torch.norm(vec1)
-#     norm_vec2 = torch.norm(vec2)
-#     return dot_product / (norm_vec1 * norm_vec2)
-
-
-# def svd_analysis(p_weight: list, t_weight: list, n: int=3):
-#     logging.info("Start SVD analysis...")
-#     for p_point, t_point in zip(p_weight, t_weight):
-#         # 对两个矩阵进行 SVD 分解
-#         U_p, sigma_p, Vh_p = torch.linalg.svd(p_point)
-#         U_t, sigma_t, Vh_t = torch.linalg.svd(t_point)
-
-#         # 提取前 n 个奇异值和对应的列（U）和行（V^T）
-#         sigma_p_top = sigma_p[:n]
-#         sigma_t_top = sigma_t[:n]
-
-#         U_p_top = U_p[:, :n]  # p_point 的前 n 列左奇异向量
-#         U_t_top = U_t[:, :n]  # t_point 的前 n 列左奇异向量
-
-#         V_p_top = Vh_p[:n, :]  # p_point 的前 n 行右奇异向量 (V^T)
-#         V_t_top = Vh_t[:n, :]  # t_point 的前 n 行右奇异向量 (V^T)
-
-#         # 计算奇异向量的余弦相似度
-#         U_cos_similarities = [cosine_similarity(U_p_top[:, i], U_t_top[:, i]) for i in range(n)]
-#         V_cos_similarities = [cosine_similarity(V_p_top[i, :], V_t_top[i, :]) for i in range(n)]
-
-#         # 打印结果
-#         print("Top-n Singular Values for P:", sigma_p_top)
-#         print("Top-n Singular Values for T:", sigma_t_top)
-#         print("\nCosine Similarities of Left Singular Vectors (U):", U_cos_similarities)
-#         print("Cosine Similarities of Right Singular Vectors (V^T):", V_cos_similarities)
+    weight_traverse(model, ft_inform)
