@@ -176,7 +176,7 @@ def init_adapter_config(
                 config_class.prompt_template = lora_config.get("prompt", None)
             config_list.append(config_class)
         elif args.evaluate:
-            config_list.extend(moe_peft.EvaluateConfig.from_config(lora_config))
+            config_list.extend(moe_peft.EvaluateConfig.from_config(lora_config))  # config["lora"] 部分
         else:
             config_list.append(moe_peft.TrainConfig.from_config(lora_config))
 

@@ -33,7 +33,7 @@ def mapping(keys_list) -> list:
 
     return mapped_list
 
-def weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
+def lora_weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
     attn_linears = ['wq_', 'wk_', 'wv_', 'wo_']
     mlp_linears = ['w1_', 'w2_', 'w3_']
     
@@ -88,6 +88,57 @@ def weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
 
     return pretrained_layers_weights, tuned_layers_weights
 
+def moe_weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
+    attn_linears = ['wq_', 'wk_', 'wv_', 'wo_']
+    mlp_linears = ['w1_', 'w2_', 'w3_']
+    
+    pretrained_layers_weights = []
+    tuned_layers_weights = []
+
+    for layer in model.model_.layers_:  # layer: single layer
+        pretrained_layer_weights = []
+        tuned_layer_weights = []
+        for item in target_linears_list:
+            for adapter_name, linear_lst in item.items():
+                for linear in linear_lst:
+                    if linear in attn_linears:
+                        try:
+                            loras_dict = getattr(layer.self_attn_, linear).loras_
+                            adapter = loras_dict.get(adapter_name, None)
+                            
+                            if adapter is not None:
+                                p_weight = getattr(adapter, 'base_layer_').weight
+                                lora_a_weight = getattr(adapter, 'lora_a_').weight
+                                lora_b_weight = getattr(adapter, 'lora_b_').weight
+                                t_weight = lora_b_weight @ lora_a_weight + p_weight
+                                
+                                linear_key = linear.rstrip('_')
+                                pretrained_layer_weights.append({linear_key: p_weight})
+                                tuned_layer_weights.append({linear_key: t_weight})
+                        except AttributeError as e:
+                            raise AttributeError(f"Error accessing attributes for linear '{linear}' in adapter '{adapter_name}': {e}")
+                    
+                    elif linear in mlp_linears:
+                        try:
+                            loras_dict = getattr(layer.mlp_.mlp_, linear).loras_
+                            adapter = loras_dict.get(adapter_name, None)  # 获取adapter_name
+                            if layer.mlp_.moes_:
+                                profile_matrix = layer.mlp_.moes_[adapter_name].profiler_
+
+                            if adapter is not None:
+                                p_weight = getattr(adapter, 'base_layer_').weight
+                                lora_a_weight = getattr(adapter, 'lora_a_').weight
+                                lora_b_weight = getattr(adapter, 'lora_b_').weight
+                                t_weight = lora_b_weight @ lora_a_weight + p_weight
+                                
+                                linear_key = linear.rstrip('_')
+                                pretrained_layer_weights.append({linear_key: p_weight})
+                                tuned_layer_weights.append({linear_key: t_weight})
+                        except AttributeError as e:
+                            raise AttributeError(f"Error accessing attributes for linear '{linear}' in adapter '{adapter_name}': {e}")
+                    
+                    else:
+                        raise ValueError(f"Invalid linear name: {linear}")
 
 def svd_analysis(p_weights: list, f_weights: list, n: int = 9):
     results = []
@@ -113,7 +164,11 @@ def svd_analysis(p_weights: list, f_weights: list, n: int = 9):
     return results
 
 
-# Function to perform SVD and calculate cosine similarity between singular vectors
 def process(model, config):
-    ft_inform = mapping(keys_extraction(config))
-    weight_traverse(model, ft_inform)
+    has_routing_strategy = any("routing_strategy" in item for item in config.get("lora", None))
+
+    if has_routing_strategy:
+        return moe_weight_traverse(model, mapping(keys_extraction(config)), config.get("profile", {}))
+
+    else:
+        return lora_weight_traverse(model, mapping(keys_extraction(config)))

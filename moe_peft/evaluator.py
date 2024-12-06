@@ -19,7 +19,7 @@ class EvaluateConfig:
     task_name: str = None
     data_path: str = None
     batch_size: int = 16
-    router_profile: bool = False
+    router_profile: bool = False  # 决定是否分析专家负载
     # Do not set these manually
     task_: BasicTask = None
     data_: List[InputData] = None
@@ -44,6 +44,7 @@ class EvaluateConfig:
         adapter_name = config["name"]
         data_path = config.get("data", None)
         task_list = config.get("task_name", "casual").split(";")
+        profile = config.get("router_profile", False)  # 添加
         path_list = (
             [None] * len(task_list) if data_path is None else data_path.split(";")
         )
@@ -57,6 +58,7 @@ class EvaluateConfig:
                     task_name=task_name_,
                     data_path=data_path_,
                     batch_size=config["evaluate_batch_size"],
+                    router_profile=True if profile else False,  # 添加
                 )
             )
 

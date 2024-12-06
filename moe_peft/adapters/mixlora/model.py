@@ -123,8 +123,10 @@ class MixtralSparseMoe(LLMMoeBlock):
         self.experts_: int = config.num_experts_
         self.topk_: int = config.top_k_
         self.jitter_noise_: float = config.jitter_noise_
-        self.router_profile_: bool = False
+        self.router_profile_: bool = True  # 是否进行router balence分析
         self.profiler_: List[int] = None
+        # self.global_expert_activation_ = [0 for _ in range(self.experts_)]
+        # self.global_activation_count_ = 0
 
         if gate is None:
             torch.nn.init.normal_(
@@ -178,9 +180,9 @@ class MixtralSparseMoe(LLMMoeBlock):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.view(-1, hidden_dim).to(self.dtype_)
         # router_logits: (batch * sequence_length, n_experts)
-        router_logits = self.gate_(hidden_states)
+        router_logits = self.gate_(hidden_states)  # 在此处计算各专家的分数
 
-        routing_weights = F.softmax(router_logits, dim=1, dtype=self.dtype_)
+        routing_weights = F.softmax(router_logits, dim=1, dtype=self.dtype_)  # 归一化处理
         routing_weights, selected_experts = torch.topk(
             routing_weights, self.topk_, dim=-1
         )

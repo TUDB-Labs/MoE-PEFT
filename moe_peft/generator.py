@@ -441,7 +441,7 @@ def generate(
         if len(dispatch_args[0]) == 0:
             break
 
-        outputs, running_jobs = _batch_generate(
+        outputs, running_jobs = _batch_generate(  # 重要入口
             model,
             tokenizer,
             max_gen_len,
