@@ -3,16 +3,17 @@ import numpy as np
 from typing import Tuple, Dict
 from sklearn.metrics.pairwise import cosine_similarity
 
+from .model import LLMModel
+
 def keys_extraction(config) -> list:
     result = []
 
-    for lora_config in config.get("lora", []):
-        name = lora_config.get("name", "unknown")
-        target_modules = lora_config.get("target_modules", {})
-        true_keys = [key for key, value in target_modules.items() if value]
-        result.append({name: true_keys})
+    name = config.adapter_name
+    target_modules = config.target_modules
+    true_keys = [key for key, value in target_modules.items() if value]
+    result.append({name: true_keys})
 
-    return result
+    return result  # 冗余数据结构设计待优化
 
 def mapping(keys_list) -> list:
     mapping_dict = {
@@ -139,6 +140,11 @@ def moe_weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
                     
                     else:
                         raise ValueError(f"Invalid linear name: {linear}")
+                    
+        pretrained_layers_weights.append(pretrained_layer_weights)
+        tuned_layers_weights.append(tuned_layer_weights)
+    
+    return pretrained_layers_weights, tuned_layers_weights
 
 def svd_analysis(p_weights: list, f_weights: list, n: int = 9):
     results = []
@@ -164,11 +170,9 @@ def svd_analysis(p_weights: list, f_weights: list, n: int = 9):
     return results
 
 
-def process(model, config):
-    has_routing_strategy = any("routing_strategy" in item for item in config.get("lora", None))
-
-    if has_routing_strategy:
-        return moe_weight_traverse(model, mapping(keys_extraction(config)), config.get("profile", {}))
+def process(model: LLMModel, config):
+    if config.moe_flag:
+        return moe_weight_traverse(model, mapping(keys_extraction(config)))
 
     else:
         return lora_weight_traverse(model, mapping(keys_extraction(config)))

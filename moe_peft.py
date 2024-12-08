@@ -92,9 +92,9 @@ parser.add_argument(
     action="store_true",
     help="Use deterministic algorithms to improve the reproducibility",
 )
-parser.add_argument(
-    "--svd_ana", action="store_true", help="Do SVD analysis on the adapter weight"
-)
+# parser.add_argument(
+#     "--svd_ana", action="store_true", help="Do SVD analysis on the adapter weight"
+# )
 
 args = parser.parse_args()
 
@@ -177,6 +177,7 @@ def init_adapter_config(
             config_list.append(config_class)
         elif args.evaluate:
             config_list.extend(moe_peft.EvaluateConfig.from_config(lora_config))  # config["lora"] 部分
+            # moe_flag?
         else:
             config_list.append(moe_peft.TrainConfig.from_config(lora_config))
 
@@ -263,14 +264,11 @@ if __name__ == "__main__":
 
     tokenizer, model = load_base_model()
 
-    # if args.svd_ana:
-    #     pretrained_weight = model.model_.layers_
-
     adapters = init_adapter_config(config, model)
 
-    if args.svd_ana:
-        moe_peft.process(model, config)
-        quit()
+    # if args.svd_ana:  # 抓取lora weight成功
+    #     moe_peft.process(model, config)
+    #     quit()
 
     moe_peft_executor.empty_cache()
 
@@ -295,6 +293,7 @@ if __name__ == "__main__":
             retrying_steps=config.get("eval_rollback_retrying_steps", 20),
             max_seq_len=config["cutoff_len"],
             save_file=config.get("evaluate_result", None),
+            # moe_flag=True if any("routing_strategy" in item for item in config.get("lora", None)) else False,
         )
     else:
         moe_peft.train(
