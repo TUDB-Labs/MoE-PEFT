@@ -170,7 +170,7 @@ def svd_analysis(p_weights: list, f_weights: list, n: int = 9, device = 'cuda:0'
     total_results = []
     results = []
 
-    for idx, (single_p_layer, single_f_layer) in enumerate(zip(p_weights, f_weights)):
+    for idx, (single_p_layer, single_f_layer) in enumerate(zip(p_weights, f_weights)):  # 126个linear
         logging.info(f"Processing layer {idx} for SVD analysis...")
         for (p_linear, f_linear) in zip(single_p_layer, single_f_layer):
             # layer_results = []
