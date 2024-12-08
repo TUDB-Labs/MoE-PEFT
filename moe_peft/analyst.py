@@ -1,3 +1,4 @@
+import torch
 import logging
 import numpy as np
 from typing import Tuple, Dict
@@ -33,6 +34,9 @@ def mapping(keys_list) -> list:
     ]
 
     return mapped_list
+
+def moe_weight_caculate(loading: list, lora_weights: list) -> torch.Tensor:
+    return sum(weight * tensor for weight, tensor in zip(loading, lora_weights))
 
 def lora_weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
     attn_linears = ['wq_', 'wk_', 'wv_', 'wo_']
@@ -101,7 +105,7 @@ def moe_weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
         tuned_layer_weights = []
         for item in target_linears_list:
             for adapter_name, linear_lst in item.items():
-                for linear in linear_lst:
+                for linear in linear_lst:  # qkvoudg
                     if linear in attn_linears:
                         try:
                             loras_dict = getattr(layer.self_attn_, linear).loras_
@@ -125,16 +129,32 @@ def moe_weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
                             adapter = loras_dict.get(adapter_name, None)  # 获取adapter_name
                             if layer.mlp_.moes_:
                                 profile_matrix = layer.mlp_.moes_[adapter_name].profiler_
+                                expert_value_lists = loras_dict.values()
+                                tuned_expert_value_lists = []
+                                total_base_layer = getattr(layer.mlp_.mlp_, linear).base_layer_.weight
 
-                            if adapter is not None:
-                                p_weight = getattr(adapter, 'base_layer_').weight
-                                lora_a_weight = getattr(adapter, 'lora_a_').weight
-                                lora_b_weight = getattr(adapter, 'lora_b_').weight
-                                t_weight = lora_b_weight @ lora_a_weight + p_weight
-                                
+                                for value in expert_value_lists:
+                                    p_weight = value.base_layer_.weight
+                                    lora_a_weight = value.lora_a_.weight
+                                    lora_b_weight = value.lora_b_.weight
+                                    t_weight = lora_b_weight @ lora_a_weight + p_weight
+                                    tuned_expert_value_lists.append(t_weight)
+
+                                final_tuned_weights = moe_weight_caculate(profile_matrix, tuned_expert_value_lists)
                                 linear_key = linear.rstrip('_')
-                                pretrained_layer_weights.append({linear_key: p_weight})
-                                tuned_layer_weights.append({linear_key: t_weight})
+                                pretrained_layer_weights.append({linear_key: total_base_layer})  # 这里的权重是moe层的预训练总权重
+                                tuned_layer_weights.append({linear_key: final_tuned_weights})  # 这里的权重是微调并且加权后的moe层的所有权重
+
+                            else:  # 普通lora微调的逻辑
+                                if adapter is not None:
+                                    p_weight = getattr(adapter, 'base_layer_').weight
+                                    lora_a_weight = getattr(adapter, 'lora_a_').weight
+                                    lora_b_weight = getattr(adapter, 'lora_b_').weight
+                                    t_weight = lora_b_weight @ lora_a_weight + p_weight
+                                    
+                                    linear_key = linear.rstrip('_')
+                                    pretrained_layer_weights.append({linear_key: p_weight})
+                                    tuned_layer_weights.append({linear_key: t_weight})
                         except AttributeError as e:
                             raise AttributeError(f"Error accessing attributes for linear '{linear}' in adapter '{adapter_name}': {e}")
                     
@@ -146,33 +166,43 @@ def moe_weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
     
     return pretrained_layers_weights, tuned_layers_weights
 
-def svd_analysis(p_weights: list, f_weights: list, n: int = 9):
+def svd_analysis(p_weights: list, f_weights: list, n: int = 9, device = 'cuda:0'):
+    total_results = []
     results = []
 
-    for layer_idx, (p_layer, f_layer) in enumerate(zip(p_weights, f_weights)):
-        layer_results = []
-        for key in p_layer.keys():
-            p_tensor = np.array(p_layer[key])
-            f_tensor = np.array(f_layer[key])
-            
-            p_u, _, _ = np.linalg.svd(p_tensor, full_matrices=False)
-            f_u, _, _ = np.linalg.svd(f_tensor, full_matrices=False)
-            
-            p_top_n = p_u[:, :n]
-            f_top_n = f_u[:, :n]
-            
-            similarity = cosine_similarity(p_top_n.T, f_top_n.T)
-            avg_similarity = np.mean(similarity)
-            
-            layer_results.append({key: avg_similarity})
-        results.append(layer_results)
+    for idx, (single_p_layer, single_f_layer) in enumerate(zip(p_weights, f_weights)):
+        logging.info(f"Processing layer {idx} for SVD analysis...")
+        for (p_linear, f_linear) in zip(single_p_layer, single_f_layer):
+            # layer_results = []
+            for key in p_linear.keys():
+                p_tensor = p_linear[key].to(device) if isinstance(p_linear[key], torch.Tensor) else torch.tensor(p_linear[key], device=device)
+                f_tensor = f_linear[key].to(device) if isinstance(f_linear[key], torch.Tensor) else torch.tensor(f_linear[key], device=device)
+                
+                p_u, _, _ = torch.linalg.svd(p_tensor, full_matrices=False)
+                f_u, _, _ = torch.linalg.svd(f_tensor, full_matrices=False)
+                
+                n_min = min(n, p_u.shape[1], f_u.shape[1])
+                p_top_n = p_u[:, :n_min]
+                f_top_n = f_u[:, :n_min]
+                
+                similarity = torch.mm(p_top_n.T, f_top_n)  # 点积
+                p_norms = torch.norm(p_top_n.T, dim=1, keepdim=True)  # 计算 p_top_n 的范数
+                f_norms = torch.norm(f_top_n, dim=0, keepdim=True)  # 计算 f_top_n 的范数
+                similarity = similarity / (p_norms * f_norms)  # 标准化为余弦相似度
+                avg_similarity = similarity.mean().item()  # 转为 Python 标量
+                
+                # layer_results.append({key: avg_similarity})
+            results.append({key: avg_similarity})
+        total_results.append(results)
     
-    return results
+    return total_results
 
 
 def process(model: LLMModel, config):
     if config.moe_flag:
-        return moe_weight_traverse(model, mapping(keys_extraction(config)))
+        weights = moe_weight_traverse(model, mapping(keys_extraction(config)))
+        return svd_analysis(weights[0], weights[1])
 
     else:
-        return lora_weight_traverse(model, mapping(keys_extraction(config)))
+        weights = moe_weight_traverse(model, mapping(keys_extraction(config)))
+        return svd_analysis(weights[0], weights[1])

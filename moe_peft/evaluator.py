@@ -2,7 +2,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import torch
 
@@ -248,13 +248,8 @@ def _compute_result(model, configs, save_file):
                     ):
                         router_statistic_[idx] += val
                     if not config.svd_ana:
-                        layer.mlp_.moes_[config.adapter_name].profiler_ = None  # 就是这里把profiler都清空了 是否可以不清空？
-                    result["router_profile"] = list(val / 32 for val in router_statistic_)  # 结果直接用的话是粗粒度分析
-        
-############################################################################
-        # if svd_flag:  预留使用总体平衡因子作为权重分配experts权重
-        #     svd
-############################################################################
+                        layer.mlp_.moes_[config.adapter_name].profiler_ = None
+                    result["router_profile"] = list(val / 32 for val in router_statistic_)
 
         final_result = result
         results.append(final_result)
@@ -339,7 +334,15 @@ def evaluate(
         for config in current_configs:
             config.rollback_start_idx_ = config.batch_start_idx_
 
-    for config in configs:  # call analyst process
-        process(model, config)
+    if config.svd_ana:
+        for config in configs:  # call analyst process
+            svd_result = process(model, config)
 
-    return _compute_result(model, configs, save_file)  # 此处计算最终结果
+            file = f"svd_result_{config.adapter_name}.json" if not save_file else save_file
+            with open(file, "w") as f:
+                json.dump(svd_result, f, indent=4)
+            logging.info(f"saving svd_analysis result to {file}")
+
+        return _compute_result(model, configs, save_file)
+
+    return _compute_result(model, configs, save_file)
