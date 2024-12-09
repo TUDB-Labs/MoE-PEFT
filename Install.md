@@ -65,7 +65,7 @@ MoE-PEFT: NVIDIA CUDA initialized successfully.
 git clone https://github.com/TUDB-Labs/MoE-PEFT
 cd moe_peft
 # Optional but recommended
-conda create -n moe_peft python=3.11
+conda create -n moe_peft python=3.12
 conda activate moe_peft
 # Install requirements
 pip3 install -r requirements.txt --upgrade
@@ -116,7 +116,7 @@ MoE-PEFT: NVIDIA CUDA initialized successfully.
 git clone https://github.com/TUDB-Labs/MoE-PEFT
 cd moe_peft
 # Optional but recommended
-conda create -n moe_peft python=3.11
+conda create -n moe_peft python=3.12
 conda activate moe_peft
 # Install requirements (CUDA 12.1)
 pip3 install torch==2.3.1 --index-url https://download.pytorch.org/whl/cu121
@@ -164,7 +164,7 @@ MoE-PEFT: NVIDIA CUDA initialized successfully.
 git clone https://github.com/TUDB-Labs/MoE-PEFT
 cd moe_peft
 # Optional but recommended
-conda create -n moe_peft python=3.11
+conda create -n moe_peft python=3.12
 conda activate moe_peft
 # Install requirements
 pip3 install -r requirements.txt --upgrade

@@ -196,7 +196,7 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
                         router_statistic_[idx] += val
                 for idx, val in enumerate(router_statistic_):
                     logging.info(
-                        f"{config.adapter_name}: expert {idx}, load = {val/32}"
+                        f"{config.adapter_name}: expert {idx}, load = {val / 32}"
                     )
 
         batch_size = logits.shape[0]

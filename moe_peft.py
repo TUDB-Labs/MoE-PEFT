@@ -216,12 +216,12 @@ def inference(
             cache_implementation=args.cache_implementation,
             stream_callback=callback,
         )
-        print(f"\n{'='*10}\n")
+        print(f"\n{'=' * 10}\n")
         print(f"PROMPT: {input_raw}")
         for adapter_name, output in outputs.items():
             print(f"{adapter_name} OUTPUT:")
             print(output[0])
-        print(f"\n{'='*10}\n")
+        print(f"\n{'=' * 10}\n")
 
 
 # Main Function

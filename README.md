@@ -16,7 +16,7 @@ MoE-PEFT is an open-source *LLMOps* framework built on [m-LoRA](https://github.c
 
 - Seamless integration with the [HuggingFace](https://huggingface.co) ecosystem.
 
-You can try MoE-PEFT with [Google Colab](https://githubtocolab.com/TUDB-Labs/MoE-PEFT/blob/main/misc/finetune-demo.ipynb) before local installation.
+You can try MoE-PEFT with [Google Colab](https://colab.research.google.com/github/TUDB-Labs/MoE-PEFT/blob/main/misc/finetune-demo.ipynb) before local installation.
 
 ## Supported Platform
 

@@ -62,6 +62,13 @@ def lora_config_factory(config: Dict[str, any]) -> LoraConfig:
     return config_class.from_config(config).check()
 
 
+def adapter_factory(peft_type: str, adapter_name: str, **kwargs) -> LoraConfig:
+    kwargs["peft_type"] = peft_type
+    config = lora_config_factory(kwargs)
+    config.adapter_name = adapter_name
+    return config
+
+
 def router_loss_factory(config: MixLoraConfig) -> torch.nn.Module:
     if config.routing_strategy_ not in router_loss_dict:
         return None
@@ -101,4 +108,5 @@ __all__ = [
     "lora_config_factory",
     "router_loss_factory",
     "moe_layer_factory",
+    "adapter_factory",
 ]
