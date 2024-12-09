@@ -92,6 +92,9 @@ parser.add_argument(
     action="store_true",
     help="Use deterministic algorithms to improve the reproducibility",
 )
+# parser.add_argument(
+#     "--svd_ana", action="store_true", help="Do SVD analysis on the adapter weight"
+# )
 
 args = parser.parse_args()
 
@@ -148,7 +151,7 @@ def init_adapter_config(
         config["cutoff_len"] = llm_model.max_seq_len_
         logging.info(f"Setting cutoff_len to {llm_model.max_seq_len_} automatically.")
 
-    for lora_config in config["lora"]:
+    for lora_config in config["lora"]:  # 对config中的每个adapter进行初始化
         adapter_name = lora_config["name"]
         adapter_path = f"{args.dir}{os.sep}{adapter_name}"
         if not args.load_adapter and os.path.exists(adapter_path):
@@ -173,7 +176,10 @@ def init_adapter_config(
                 config_class.prompt_template = lora_config.get("prompt", None)
             config_list.append(config_class)
         elif args.evaluate:
-            config_list.extend(moe_peft.EvaluateConfig.from_config(lora_config))
+            config_list.extend(
+                moe_peft.EvaluateConfig.from_config(lora_config)
+            )  # config["lora"] 部分
+            # moe_flag?
         else:
             config_list.append(moe_peft.TrainConfig.from_config(lora_config))
 
@@ -202,7 +208,7 @@ def inference(
         for config in configs:
             config.prompts = [input_raw]
         callback = None if args.disable_log else inference_callback
-        outputs = moe_peft.generate(
+        outputs = moe_peft.generate(  # 此处已经配置好Genconfig，开始分词并且逐渐生成切片后的向量
             model,
             tokenizer,
             configs,
@@ -259,7 +265,12 @@ if __name__ == "__main__":
         config = json.load(fp)
 
     tokenizer, model = load_base_model()
+
     adapters = init_adapter_config(config, model)
+
+    # if args.svd_ana:  # 抓取lora weight成功
+    #     moe_peft.process(model, config)
+    #     quit()
 
     moe_peft_executor.empty_cache()
 
@@ -284,6 +295,7 @@ if __name__ == "__main__":
             retrying_steps=config.get("eval_rollback_retrying_steps", 20),
             max_seq_len=config["cutoff_len"],
             save_file=config.get("evaluate_result", None),
+            # moe_flag=True if any("routing_strategy" in item for item in config.get("lora", None)) else False,
         )
     else:
         moe_peft.train(
