@@ -367,7 +367,9 @@ class Linear(nn.Module):
                 self.device_,
             )
 
-        self.loras_[adapter_name].reset_parameters(lora_tensor)  # lora_tensor即为lora_a & lora_b元组
+        self.loras_[adapter_name].reset_parameters(
+            lora_tensor
+        )  # lora_tensor即为lora_a & lora_b元组
 
     def _appy_dora(
         self,

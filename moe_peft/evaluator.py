@@ -2,16 +2,16 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import torch
 
 from .adapters import MixLoraConfig
+from .analyst import process
 from .common import InputData, LLMBatchConfig, LLMModelInput, Prompt
 from .model import LLMModel
 from .tasks import BasicMetric, BasicTask, CommonSenseTask, task_dict
 from .tokenizer import Tokenizer
-from .analyst import process
 
 
 @dataclass
@@ -44,7 +44,9 @@ class EvaluateConfig:
         return data
 
     @staticmethod
-    def from_config(config: Dict[str, any]) -> List["EvaluateConfig"]:  # 所有config有关的设置均可在这里修改
+    def from_config(
+        config: Dict[str, any]
+    ) -> List["EvaluateConfig"]:  # 所有config有关的设置均可在这里修改
         adapter_name = config["name"]
         data_path = config.get("data", None)
         task_list = config.get("task_name", "casual").split(";")
@@ -249,7 +251,9 @@ def _compute_result(model, configs, save_file):
                         router_statistic_[idx] += val
                     if not config.svd_ana:
                         layer.mlp_.moes_[config.adapter_name].profiler_ = None
-                    result["router_profile"] = list(val / 32 for val in router_statistic_)
+                    result["router_profile"] = list(
+                        val / 32 for val in router_statistic_
+                    )
 
         final_result = result
         results.append(final_result)
@@ -269,7 +273,7 @@ def evaluate(
     model: LLMModel,
     tokenizer: Tokenizer,
     configs: List[EvaluateConfig],  # 可能是多个config文件😋
-    max_concurrent_jobs: int = None, 
+    max_concurrent_jobs: int = None,
     retrying_steps: int = 20,
     max_seq_len: int = 512,
     save_file: str = None,
@@ -338,7 +342,9 @@ def evaluate(
         for config in configs:  # call analyst process
             svd_result = process(model, config)
 
-            file = f"svd_result_{config.adapter_name}.json" if not save_file else save_file
+            file = (
+                f"svd_result_{config.adapter_name}.json" if not save_file else save_file
+            )
             with open(file, "w") as f:
                 json.dump(svd_result, f, indent=4)
             logging.info(f"saving svd_analysis result to {file}")

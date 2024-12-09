@@ -1,4 +1,6 @@
 from .adapters import adapter_factory
+from .analyst import process
+from .analysts import SVDProcessor
 from .common import (
     AdapterConfig,
     LLMBatchConfig,
@@ -19,8 +21,6 @@ from .prompter import Prompter
 from .tokenizer import Tokenizer
 from .trainer import TrainConfig, train
 from .utils import is_package_available, setup_logging
-from .analyst import process
-from .analysts import SVDProcessor
 
 assert is_package_available("torch", "2.3.0"), "MoE-PEFT requires torch>=2.3.0"
 assert is_package_available(
@@ -54,5 +54,5 @@ __all__ = [
     "setup_logging",
     "executor",
     "process",
-    "SVDProcessor"
+    "SVDProcessor",
 ]

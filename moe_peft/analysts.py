@@ -1,5 +1,6 @@
-import torch
 from typing import List, Tuple
+
+import torch
 
 
 class SVDProcessor:
@@ -38,7 +39,7 @@ class SVDProcessor:
             "o_proj": "wo_",
             "gate_proj": "w1_",
             "down_proj": "w2_",
-            "up_proj": "w3_"
+            "up_proj": "w3_",
         }
 
         return [
@@ -57,15 +58,17 @@ class SVDProcessor:
         """
         return sum(weight * tensor for weight, tensor in zip(loading, lora_weights))
 
-    def weight_traverse(self, target_linears_list, is_moe: bool = False) -> Tuple[List, List]:
+    def weight_traverse(
+        self, target_linears_list, is_moe: bool = False
+    ) -> Tuple[List, List]:
         """
         遍历权重
         :param target_linears_list: 提取的线性层列表
         :param is_moe: 是否为 MOE 模式
         :return: (预训练权重, 微调权重)
         """
-        attn_linears = ['wq_', 'wk_', 'wv_', 'wo_']
-        mlp_linears = ['w1_', 'w2_', 'w3_']
+        attn_linears = ["wq_", "wk_", "wv_", "wo_"]
+        mlp_linears = ["w1_", "w2_", "w3_"]
 
         pretrained_layers_weights = []
         tuned_layers_weights = []
@@ -88,21 +91,29 @@ class SVDProcessor:
                             adapter = loras_dict.get(adapter_name, None)
 
                             if adapter:
-                                p_weight = getattr(adapter, 'base_layer_').weight
-                                lora_a_weight = getattr(adapter, 'lora_a_').weight
-                                lora_b_weight = getattr(adapter, 'lora_b_').weight
+                                p_weight = getattr(adapter, "base_layer_").weight
+                                lora_a_weight = getattr(adapter, "lora_a_").weight
+                                lora_b_weight = getattr(adapter, "lora_b_").weight
                                 t_weight = lora_b_weight @ lora_a_weight + p_weight
 
-                                linear_key = linear.rstrip('_')
+                                linear_key = linear.rstrip("_")
                                 pretrained_layer_weights.append({linear_key: p_weight})
                                 tuned_layer_weights.append({linear_key: t_weight})
 
                             # MOE 特定逻辑
-                            if is_moe and hasattr(layer.mlp_, 'moes_') and adapter_name in layer.mlp_.moes_:
-                                profile_matrix = layer.mlp_.moes_[adapter_name].profiler_
+                            if (
+                                is_moe
+                                and hasattr(layer.mlp_, "moes_")
+                                and adapter_name in layer.mlp_.moes_
+                            ):
+                                profile_matrix = layer.mlp_.moes_[
+                                    adapter_name
+                                ].profiler_
                                 expert_value_lists = loras_dict.values()
                                 tuned_expert_value_lists = []
-                                total_base_layer = getattr(layer.mlp_.mlp_, linear).base_layer_.weight
+                                total_base_layer = getattr(
+                                    layer.mlp_.mlp_, linear
+                                ).base_layer_.weight
 
                                 for value in expert_value_lists:
                                     p_weight = value.base_layer_.weight
@@ -111,12 +122,20 @@ class SVDProcessor:
                                     t_weight = lora_b_weight @ lora_a_weight + p_weight
                                     tuned_expert_value_lists.append(t_weight)
 
-                                final_tuned_weights = self.moe_weight_caculate(profile_matrix, tuned_expert_value_lists)
-                                pretrained_layer_weights.append({linear_key: total_base_layer})
-                                tuned_layer_weights.append({linear_key: final_tuned_weights})
+                                final_tuned_weights = self.moe_weight_caculate(
+                                    profile_matrix, tuned_expert_value_lists
+                                )
+                                pretrained_layer_weights.append(
+                                    {linear_key: total_base_layer}
+                                )
+                                tuned_layer_weights.append(
+                                    {linear_key: final_tuned_weights}
+                                )
 
                         except AttributeError as e:
-                            raise AttributeError(f"Error accessing attributes for linear '{linear}' in adapter '{adapter_name}': {e}")
+                            raise AttributeError(
+                                f"Error accessing attributes for linear '{linear}' in adapter '{adapter_name}': {e}"
+                            )
 
             pretrained_layers_weights.append(pretrained_layer_weights)
             tuned_layers_weights.append(tuned_layer_weights)
@@ -124,7 +143,9 @@ class SVDProcessor:
         return pretrained_layers_weights, tuned_layers_weights
 
     @staticmethod
-    def svd_analysis(p_weights: list, f_weights: list, n: int = 9, device: str = 'cuda:0') -> List:
+    def svd_analysis(
+        p_weights: list, f_weights: list, n: int = 9, device: str = "cuda:0"
+    ) -> List:
         """
         对比分析 SVD 分解的权重
         :param p_weights: 预训练权重
@@ -138,8 +159,16 @@ class SVDProcessor:
         for layer_idx, (p_layer, f_layer) in enumerate(zip(p_weights, f_weights)):
             layer_results = []
             for key in p_layer.keys():
-                p_tensor = p_layer[key].to(device) if isinstance(p_layer[key], torch.Tensor) else torch.tensor(p_layer[key], device=device)
-                f_tensor = f_layer[key].to(device) if isinstance(f_layer[key], torch.Tensor) else torch.tensor(f_layer[key], device=device)
+                p_tensor = (
+                    p_layer[key].to(device)
+                    if isinstance(p_layer[key], torch.Tensor)
+                    else torch.tensor(p_layer[key], device=device)
+                )
+                f_tensor = (
+                    f_layer[key].to(device)
+                    if isinstance(f_layer[key], torch.Tensor)
+                    else torch.tensor(f_layer[key], device=device)
+                )
 
                 p_u, _, _ = torch.linalg.svd(p_tensor, full_matrices=False)
                 f_u, _, _ = torch.linalg.svd(f_tensor, full_matrices=False)

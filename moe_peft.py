@@ -176,7 +176,9 @@ def init_adapter_config(
                 config_class.prompt_template = lora_config.get("prompt", None)
             config_list.append(config_class)
         elif args.evaluate:
-            config_list.extend(moe_peft.EvaluateConfig.from_config(lora_config))  # config["lora"] 部分
+            config_list.extend(
+                moe_peft.EvaluateConfig.from_config(lora_config)
+            )  # config["lora"] 部分
             # moe_flag?
         else:
             config_list.append(moe_peft.TrainConfig.from_config(lora_config))
@@ -206,7 +208,7 @@ def inference(
         for config in configs:
             config.prompts = [input_raw]
         callback = None if args.disable_log else inference_callback
-        outputs = moe_peft.generate(  #此处已经配置好Genconfig，开始分词并且逐渐生成切片后的向量
+        outputs = moe_peft.generate(  # 此处已经配置好Genconfig，开始分词并且逐渐生成切片后的向量
             model,
             tokenizer,
             configs,

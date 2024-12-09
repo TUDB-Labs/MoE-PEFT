@@ -252,10 +252,14 @@ def init_lora_layer_weight(  # 将LoRA weight attach到不同的线性层上
                 lora_a = None
                 lora_b = None
             else:
-                lora_a = lora_weights.get(f"{module_name}.lora_A.weight", None)  # lora_weight为 parameter container类，用.get()取值
+                lora_a = lora_weights.get(
+                    f"{module_name}.lora_A.weight", None
+                )  # lora_weight为 parameter container类，用.get()取值
                 lora_b = lora_weights.get(f"{module_name}.lora_B.weight", None)
 
-            lora_linear.init_lora_weight(lora_config, (lora_a, lora_b))  # 初始化lora_linear，传入config和lora_a&b元组
+            lora_linear.init_lora_weight(
+                lora_config, (lora_a, lora_b)
+            )  # 初始化lora_linear，传入config和lora_a&b元组
 
 
 def get_lora_layer_weight(
@@ -471,13 +475,15 @@ class LLMModel(torch.nn.Module):
             hidden_states, cache_position.unsqueeze(0)
         )
 
-        hidden_states, all_router_logits = self._call_decoder_stack(  # 正式call decoder stack  
-            hidden_states,
-            input_args,
-            rotary_emb,
-            causal_mask,
-            cache_position,
-            past_key_values,
+        hidden_states, all_router_logits = (
+            self._call_decoder_stack(  # 正式call decoder stack
+                hidden_states,
+                input_args,
+                rotary_emb,
+                causal_mask,
+                cache_position,
+                past_key_values,
+            )
         )
 
         # calculate loss
@@ -585,7 +591,11 @@ class LLMModel(torch.nn.Module):
         return LLMModel(model)
 
     def init_adapter(
-        self, config: AdapterConfig, weight: Optional[Dict[str, torch.Tensor]] = None  # 目前来看传入的weight是lora weight
+        self,
+        config: AdapterConfig,
+        weight: Optional[
+            Dict[str, torch.Tensor]
+        ] = None,  # 目前来看传入的weight是lora weight
     ):
         # Patch for MixLoRA
         if isinstance(config, MixLoraConfig) and config.act_fn_ is None:
@@ -596,7 +606,7 @@ class LLMModel(torch.nn.Module):
         if config.task_name in task_dict and isinstance(
             task_dict[config.task_name], SequenceClassificationTask
         ):
-            output_layer = ClassificationOutputLayer( # 输出层，包含lora_weight
+            output_layer = ClassificationOutputLayer(  # 输出层，包含lora_weight
                 **task_dict[config.task_name].init_kwargs(),
                 hidden_size=self.config_.dim_,
                 pad_token_id=self.config_.pad_token_id_,
@@ -605,14 +615,17 @@ class LLMModel(torch.nn.Module):
             )
         else:
             output_layer = CasualOutputLayer(
-                vocab_size=self.config_.vocab_size_, weight=self.model_.lm_head_  # 此处加载预训练权重
+                vocab_size=self.config_.vocab_size_,
+                weight=self.model_.lm_head_,  # 此处加载预训练权重
             )
 
         self.output_.layers_[config.adapter_name] = output_layer
         if type(config) is not AdapterConfig:
             # init transformer layers 该循环遍历所有TransformerLayer，加载微调参数
             for transformer_layer in self.model_.layers_:
-                init_lora_layer_weight(transformer_layer, self.config_, config, weight)  # LoRA weight
+                init_lora_layer_weight(
+                    transformer_layer, self.config_, config, weight
+                )  # LoRA weight
         else:
             assert weight is None, "can not load basic adapter with weight"
 
@@ -672,7 +685,7 @@ class LLMModel(torch.nn.Module):
         ) as fp:
             lora_config = lora_config_factory(json.load(fp))
         lora_config.adapter_name = adapter_name
-        lora_weight = torch.load(  #此处加载微调后的lora权重
+        lora_weight = torch.load(  # 此处加载微调后的lora权重
             name_or_path + os.sep + "adapter_model.bin",
             map_location=self.device_,
             weights_only=False,
