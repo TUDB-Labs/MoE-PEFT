@@ -166,7 +166,7 @@ def moe_weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
     
     return pretrained_layers_weights, tuned_layers_weights
 
-def svd_analysis(p_weights: list, f_weights: list, n: int = 9, device = 'cuda:0'):
+'''def svd_analysis(p_weights: list, f_weights: list, n: int = 9, device = 'cuda:0'):
     total_results = []
     results = []
 
@@ -195,8 +195,48 @@ def svd_analysis(p_weights: list, f_weights: list, n: int = 9, device = 'cuda:0'
             results.append({key: avg_similarity})
         total_results.append(results)
     
-    return total_results
+    return total_results'''
 
+def svd_analysis(p_weights: list, f_weights: list, n: int = 9, device='cuda:0'):
+    total_results = []
+
+    for idx, (single_p_layer, single_f_layer) in enumerate(zip(p_weights, f_weights)):  # 遍历每一层
+        logging.info(f"Processing layer {idx} for SVD analysis...")
+        layer_results = []
+
+        for p_linear, f_linear in zip(single_p_layer, single_f_layer):  # 遍历每一层的线性层
+            layer_linear_results = {}
+            
+            for key in p_linear.keys():  # 遍历线性层中的每组权重
+                p_tensor = p_linear[key].to(device) if isinstance(p_linear[key], torch.Tensor) else torch.tensor(p_linear[key], device=device)
+                f_tensor = f_linear[key].to(device) if isinstance(f_linear[key], torch.Tensor) else torch.tensor(f_linear[key], device=device)
+                
+                # 进行SVD分解
+                p_u, _, _ = torch.linalg.svd(p_tensor, full_matrices=False)
+                f_u, _, _ = torch.linalg.svd(f_tensor, full_matrices=False)
+                
+                # 获取前n个奇异向量
+                n_min = min(n, p_u.shape[1], f_u.shape[1])
+                p_top_n = p_u[:, :n_min]
+                f_top_n = f_u[:, :n_min]
+                
+                # 计算余弦相似度
+                similarity = torch.mm(p_top_n.T, f_top_n)  # 点积
+                p_norms = torch.norm(p_top_n.T, dim=1, keepdim=True)  # 计算 p_top_n 的范数
+                f_norms = torch.norm(f_top_n, dim=0, keepdim=True)  # 计算 f_top_n 的范数
+                similarity = similarity / (p_norms * f_norms)  # 标准化为余弦相似度
+                
+                # 转为 Python 标量列表
+                cos_similarities = similarity.diagonal().tolist()
+                
+                # 存储结果
+                layer_linear_results[key] = cos_similarities
+            
+            layer_results.append(layer_linear_results)
+        
+        total_results.append(layer_results)
+    
+    return total_results
 
 def process(model: LLMModel, config):
     if config.moe_flag:
