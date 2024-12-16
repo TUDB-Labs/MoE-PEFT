@@ -92,10 +92,6 @@ parser.add_argument(
     action="store_true",
     help="Use deterministic algorithms to improve the reproducibility",
 )
-# parser.add_argument(
-#     "--svd_ana", action="store_true", help="Do SVD analysis on the adapter weight"
-# )
-
 args = parser.parse_args()
 
 
@@ -176,10 +172,7 @@ def init_adapter_config(
                 config_class.prompt_template = lora_config.get("prompt", None)
             config_list.append(config_class)
         elif args.evaluate:
-            config_list.extend(
-                moe_peft.EvaluateConfig.from_config(lora_config)
-            )  # config["lora"] 部分
-            # moe_flag?
+            config_list.extend(moe_peft.EvaluateConfig.from_config(lora_config))
         else:
             config_list.append(moe_peft.TrainConfig.from_config(lora_config))
 
