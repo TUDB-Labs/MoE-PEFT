@@ -145,8 +145,10 @@ def init_adapter_config(
     config_list = []
 
     if config["cutoff_len"] == -1:
-        config["cutoff_len"] = llm_model.max_seq_len_
-        logging.info(f"Setting cutoff_len to {llm_model.max_seq_len_} automatically.")
+        config["cutoff_len"] = llm_model.config_.max_seq_len_
+        logging.info(
+            f"Setting cutoff_len to {llm_model.config_.max_seq_len_} automatically."
+        )
 
     for lora_config in config["lora"]:
         adapter_name = lora_config["name"]
