@@ -115,18 +115,46 @@ def moe_weight_traverse_and_processing(model, target_linears_list) -> None:
                             loras_dict = getattr(layer.self_attn_, linear).loras_
                             adapter = loras_dict.get(adapter_name, None)
 
-                            if adapter is not None:
-                                p_weight = getattr(adapter, "base_layer_").weight
-                                lora_a_weight = getattr(adapter, "lora_a_").weight
-                                lora_b_weight = getattr(adapter, "lora_b_").weight
-                                t_weight = lora_b_weight @ lora_a_weight + p_weight
+                            if layer.attn_.moes_:
+                                profile_matrix = layer.attn_.moes_[
+                                    adapter_name
+                                ].profiler_
+                                expert_value_lists = loras_dict.values()
+                                tuned_expert_value_lists = []
+
+                                for value in expert_value_lists:
+                                    p_weight = value.base_layer_.weight
+                                    lora_a_weight = value.lora_a_.weight
+                                    lora_b_weight = value.lora_b_.weight
+                                    t_weight = lora_b_weight @ lora_a_weight + p_weight
+                                    tuned_expert_value_lists.append(t_weight)
+
+                                tuned_weights = moe_weight_caculate(
+                                    profile_matrix, tuned_expert_value_lists
+                                )
 
                                 linear_key = linear.rstrip("_")
                                 layer_result.append(
                                     {
-                                        linear_key: svd_analysis(p_weight, t_weight)
-                                    }  # linear result
+                                        linear_key: svd_analysis(
+                                            p_weight, tuned_weights
+                                        )
+                                    }  # layer result
                                 )
+
+                            else:
+                                if adapter is not None:
+                                    p_weight = getattr(adapter, "base_layer_").weight
+                                    lora_a_weight = getattr(adapter, "lora_a_").weight
+                                    lora_b_weight = getattr(adapter, "lora_b_").weight
+                                    t_weight = lora_b_weight @ lora_a_weight + p_weight
+
+                                    linear_key = linear.rstrip("_")
+                                    layer_result.append(
+                                        {
+                                            linear_key: svd_analysis(p_weight, t_weight)
+                                        }  # linear result
+                                    )
 
                         except AttributeError as e:
                             raise AttributeError(
@@ -136,9 +164,8 @@ def moe_weight_traverse_and_processing(model, target_linears_list) -> None:
                     elif linear in mlp_linears:
                         try:
                             loras_dict = getattr(layer.mlp_.mlp_, linear).loras_
-                            adapter = loras_dict.get(
-                                adapter_name, None
-                            )  # 获取adapter_name
+                            adapter = loras_dict.get(adapter_name, None)
+
                             if layer.mlp_.moes_:
                                 profile_matrix = layer.mlp_.moes_[
                                     adapter_name

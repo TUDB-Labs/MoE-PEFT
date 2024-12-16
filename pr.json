@@ -6,16 +6,16 @@
     "train_strategy": "optim",
     "lora": [
         {
-            "name": "obqa_pr_test_0",
-            "task_name": "obqa",
+            "name": "pr_test",
+            "task_name": "arc-c",
             "optim": "adamw",
             "scheduler_type": "constant",
             "warmup_steps": 0,
-            "lr": 0.00005,
+            "lr": 0.0002,
             "batch_size": 16,
             "micro_batch_size": 8,
             "evaluate_batch_size": 16,
-            "num_epochs": 1,
+            "num_epochs": 2,
             "r": 16,
             "lora_alpha": 32,
             "lora_dropout": 0.05,
@@ -32,8 +32,8 @@
             "num_experts": 8,
             "top_k": 2,
             "group_by_length": false,
-            "entropy_coef": 0.01,
-            "entropy_type": "tsallis"
+            "router_profile": true,
+            "svd_analysis": true
         }
     ]
 }
