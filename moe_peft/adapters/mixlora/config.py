@@ -23,6 +23,10 @@ class MixLoraConfig(LoraConfig):
     num_experts_: int = None
     act_fn_: Optional[Union[str, torch.nn.Module]] = None
     # mixtral config
+    router_dyn_loss_coef_: float = None
+    entropy_index_: float = None
+    entropy_type_: str = None
+    entropy_eps_: float = None
     top_k_: int = None
     # dynamic config
     top_p_: float = None
@@ -55,6 +59,20 @@ class MixLoraConfig(LoraConfig):
             isinstance(self.act_fn_, str) and self.act_fn_ in ACT2FN
         )
         if self.routing_strategy_ == "mixlora":
+            assert (
+                isinstance(self.router_dyn_loss_coef_, float)
+                and self.router_dyn_loss_coef_ >= 0
+            )
+            assert (
+                isinstance(self.entropy_index_, float)
+                and self.entropy_index_ > 0
+                and self.entropy_index_ <= 2.0
+            )
+            assert isinstance(self.entropy_type_, str) and self.entropy_type_ in [
+                "tsallis",
+                "renyi",
+            ]
+            assert isinstance(self.entropy_eps_, float) and self.entropy_eps_ > 0
             assert isinstance(self.top_k_, int) and self.top_k_ > 0
         elif self.routing_strategy_ == "mixlora-dynamic":
             assert (
@@ -90,6 +108,12 @@ class MixLoraConfig(LoraConfig):
         # left blank to automatically use the original act_fn of FFN
         lora_config.act_fn_ = config.get("act_fn", None)
         if lora_config.routing_strategy_ == "mixlora":
+            lora_config.router_dyn_loss_coef_ = config.get(
+                "router_dyn_loss_coef", 0.01
+            )  # for training
+            lora_config.entropy_index_ = config.get("entropy_index", 1.4)
+            lora_config.entropy_type_ = config.get("entropy_type", "tsallis")
+            lora_config.entropy_eps_ = config.get("entropy_eps", 1e-5)
             lora_config.router_init_range_ = config.get("router_init_range", 0.02)
             lora_config.jitter_noise_ = config.get("jitter_noise", 0.0)
             lora_config.top_k_ = config.get("top_k", 2)
