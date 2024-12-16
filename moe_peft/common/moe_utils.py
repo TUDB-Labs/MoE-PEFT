@@ -48,6 +48,10 @@ def collect_plugin_router_logtis(
                 if router_logits[idx] is None:
                     router_logits[idx] = []
                 router_logits[idx].append(proj.moes_[adapter_name].router_logits_)
+
+    for proj in all_proj.values():
+        for adapter_name in proj.moes_.keys():
+            if hasattr(proj.moes_[adapter_name], "router_logits_"):
                 proj.moes_[adapter_name].router_logits_ = None
 
     for idx, logits in enumerate(router_logits):
