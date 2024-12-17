@@ -7,7 +7,7 @@ from typing import Dict, List
 import torch
 
 from .adapters import MixLoraConfig
-from .analyst import process
+from .analysts import SVDProcessor
 from .common import InputData, LLMBatchConfig, LLMModelInput, Prompt
 from .model import LLMModel
 from .tasks import BasicMetric, BasicTask, CommonSenseTask, task_dict
@@ -44,16 +44,14 @@ class EvaluateConfig:
         return data
 
     @staticmethod
-    def from_config(
-        config: Dict[str, any]
-    ) -> List["EvaluateConfig"]:  # 所有config有关的设置均可在这里修改
+    def from_config(config: Dict[str, any]) -> List["EvaluateConfig"]:
         adapter_name = config["name"]
         data_path = config.get("data", None)
         task_list = config.get("task_name", "casual").split(";")
-        profile = config.get("router_profile", False)  # 添加
-        svd_ana = config.get("svd_analysis", False)  # 添加
-        moe_flag = svd_ana and ("routing_strategy" in config)  # 添加
-        target_modules = config.get("target_modules", None) if svd_ana else None  # 添加
+        profile = config.get("router_profile", False)
+        svd_ana = config.get("svd_analysis", False)
+        moe_flag = svd_ana and ("routing_strategy" in config)
+        target_modules = config.get("target_modules", None) if svd_ana else None
         path_list = (
             [None] * len(task_list) if data_path is None else data_path.split(";")
         )
@@ -67,10 +65,10 @@ class EvaluateConfig:
                     task_name=task_name_,
                     data_path=data_path_,
                     batch_size=config["evaluate_batch_size"],
-                    router_profile=True if profile else False,  # 添加
-                    svd_ana=True if svd_ana else False,  # 添加
-                    moe_flag=True if moe_flag else False,  # 添加
-                    target_modules=target_modules if target_modules else None,  # 添加
+                    router_profile=True if profile else False,
+                    svd_ana=True if svd_ana else False,
+                    moe_flag=True if moe_flag else False,
+                    target_modules=target_modules if target_modules else None,
                 )
             )
 
@@ -272,7 +270,7 @@ def _compute_result(model, configs, save_file):
 def evaluate(
     model: LLMModel,
     tokenizer: Tokenizer,
-    configs: List[EvaluateConfig],  # 可能是多个config文件😋
+    configs: List[EvaluateConfig],
     max_concurrent_jobs: int = None,
     retrying_steps: int = 20,
     max_seq_len: int = 512,
@@ -340,14 +338,17 @@ def evaluate(
 
     if config.svd_ana:
         for config in configs:  # call analyst process
-            svd_result = process(model, config)
+            processor = SVDProcessor(model, config)
+            svd_result = processor.process()
 
             file = (
-                f"svd_result: {config.adapter_name}.json" if not save_file else save_file
+                f"svd_result: {config.adapter_name}.json"
+                if not save_file
+                else save_file
             )
             with open(file, "w") as f:
                 json.dump(svd_result, f, indent=4)
-            logging.info(f"saving svd_analysis result to [{file}]")
+            logging.info(f"saving svd_analysis result to {file}")
 
         return _compute_result(model, configs, save_file)
 

@@ -1,38 +1,18 @@
-from typing import List, Tuple
+import logging
+from typing import Dict, List
 
 import torch
 
+from .model import LLMModel
+
 
 class SVDProcessor:
-    def __init__(self, model, config):
-        """
-        初始化 LLMProcessor
-        :param model: LLMModel 实例
-        :param config: 配置对象，包含 adapter_name、target_modules 和 moe_flag 等属性
-        """
+    def __init__(self, model: LLMModel, config):
         self.model = model
         self.config = config
 
-    def keys_extraction(self) -> list:
-        """
-        提取目标 keys
-        :return: 包含 adapter 名称及其 keys 的列表
-        """
-        result = []
-        name = self.config.adapter_name
-        target_modules = self.config.target_modules
-        true_keys = [key for key, value in target_modules.items() if value]
-        result.append({name: true_keys})
-        return result
-
-    @staticmethod
-    def mapping(keys_list: list) -> list:
-        """
-        将 keys 映射为标准化名称
-        :param keys_list: 提取的 keys 列表
-        :return: 映射后的 keys 列表
-        """
-        mapping_dict = {
+        # Mapping dictionary for linear names to their corresponding LoRA attributes
+        self._mapping_dict = {
             "q_proj": "wq_",
             "k_proj": "wk_",
             "v_proj": "wv_",
@@ -42,163 +22,228 @@ class SVDProcessor:
             "up_proj": "w3_",
         }
 
-        return [
-            {name: [mapping_dict[key] for key in keys if key in mapping_dict]}
+        # Possible linear types
+        self._attn_linears = ["wq_", "wk_", "wv_", "wo_"]
+        self._mlp_linears = ["w1_", "w2_", "w3_"]
+
+    def process(self) -> List[List[Dict[str, List[float]]]]:
+        target_linears_list = self._mapping(self._keys_extraction(self.config))
+
+        if self.config.moe_flag:
+            return self._moe_weight_traverse(target_linears_list)
+        else:
+            return self._lora_weight_traverse(target_linears_list)
+
+    def _keys_extraction(self, config) -> List[Dict[str, List[str]]]:
+        name = config.adapter_name
+        target_modules: Dict[str, bool] = config.target_modules
+        true_keys = [key for key, value in target_modules.items() if value]
+        return [{name: true_keys}]
+
+    def _mapping(
+        self, keys_list: List[Dict[str, List[str]]]
+    ) -> List[Dict[str, List[str]]]:
+        mapped_list = [
+            {
+                name: [
+                    self._mapping_dict[key] for key in keys if key in self._mapping_dict
+                ]
+            }
             for item in keys_list
             for name, keys in item.items()
         ]
+        return mapped_list
 
-    @staticmethod
-    def moe_weight_caculate(loading: list, lora_weights: list) -> torch.Tensor:
-        """
-        计算加权的 MOE 权重
-        :param loading: 加载 profile_matrix
-        :param lora_weights: 各个 expert 的权重
-        :return: 最终加权权重
-        """
+    def _moe_weight_calculate(
+        self, loading: List[float], lora_weights: List[torch.Tensor]
+    ) -> torch.Tensor:
         return sum(weight * tensor for weight, tensor in zip(loading, lora_weights))
 
-    def weight_traverse(
-        self, target_linears_list, is_moe: bool = False
-    ) -> Tuple[List, List]:
-        """
-        遍历权重
-        :param target_linears_list: 提取的线性层列表
-        :param is_moe: 是否为 MOE 模式
-        :return: (预训练权重, 微调权重)
-        """
-        attn_linears = ["wq_", "wk_", "wv_", "wo_"]
-        mlp_linears = ["w1_", "w2_", "w3_"]
+    def _perform_svd_analysis(
+        self,
+        p_weight: torch.Tensor,
+        f_weight: torch.Tensor,
+        n: int = 9,
+        device: str = "cuda:0",
+    ) -> List[float]:
+        p_weight = p_weight.to(torch.float32).to(device)
+        f_weight = f_weight.to(torch.float32).to(device)
 
-        pretrained_layers_weights = []
-        tuned_layers_weights = []
+        # SVD decomposition
+        p_u, _, _ = torch.linalg.svd(p_weight, full_matrices=False)
+        f_u, _, _ = torch.linalg.svd(f_weight, full_matrices=False)
 
-        for layer in self.model.model_.layers_:
-            pretrained_layer_weights = []
-            tuned_layer_weights = []
+        # Pick top-n singular vectors
+        n_min = min(n, p_u.shape[1], f_u.shape[1])
+        p_top_n = p_u[:, :n_min]
+        f_top_n = f_u[:, :n_min]
+
+        # Compute cosine similarities
+        similarity = torch.mm(p_top_n.T, f_top_n)
+        p_norms = torch.norm(p_top_n.T, dim=1, keepdim=True)
+        f_norms = torch.norm(f_top_n, dim=0, keepdim=True)
+        similarity = similarity / (p_norms * f_norms)
+
+        return similarity.diagonal().tolist()
+
+    def _process_lora_block(
+        self,
+        layer_idx: int,
+        linear: str,
+        adapter_name: str,
+        loras_dict: Dict[str, torch.nn.Module],
+        moe_profile: torch.Tensor = None,
+    ) -> Dict[str, List[float]]:
+        if moe_profile is not None:
+            # MoE scenario
+            tuned_expert_value_lists = []
+
+            for expert_adapter in loras_dict.values():
+                p_weight = expert_adapter.base_layer_.weight
+                lora_a_weight = expert_adapter.lora_a_.weight
+                lora_b_weight = expert_adapter.lora_b_.weight
+                t_weight = lora_b_weight @ lora_a_weight + p_weight
+                tuned_expert_value_lists.append(t_weight)
+
+            tuned_weights = self._moe_weight_calculate(
+                moe_profile, tuned_expert_value_lists
+            )
+            linear_key = linear.rstrip("_")
+            logging.info(
+                f"Layer [{layer_idx}], linear [{linear_key}]: performing MoE SVD analysis..."
+            )
+            return {linear_key: self._perform_svd_analysis(p_weight, tuned_weights)}
+
+        else:
+            # Normal LoRA scenario
+            adapter = loras_dict.get(adapter_name, None)
+            if adapter is not None:
+                p_weight = adapter.base_layer_.weight
+                lora_a_weight = adapter.lora_a_.weight
+                lora_b_weight = adapter.lora_b_.weight
+                t_weight = lora_b_weight @ lora_a_weight + p_weight
+
+                linear_key = linear.rstrip("_")
+                logging.info(
+                    f"Layer [{layer_idx}], linear [{linear_key}]: performing SVD analysis..."
+                )
+                return {linear_key: self._perform_svd_analysis(p_weight, t_weight)}
+
+        return {}
+
+    def _lora_weight_traverse(
+        self, target_linears_list: List[Dict[str, List[str]]]
+    ) -> List[List[Dict[str, List[float]]]]:
+        final_result = []
+
+        for layer_idx, layer in enumerate(self.model.model_.layers_):
+            layer_result = []
             for item in target_linears_list:
                 for adapter_name, linear_lst in item.items():
                     for linear in linear_lst:
-                        try:
-                            # 判断是注意力层还是 MLP 层
-                            if linear in attn_linears:
-                                loras_dict = getattr(layer.self_attn_, linear).loras_
-                            elif linear in mlp_linears:
-                                loras_dict = getattr(layer.mlp_.mlp_, linear).loras_
-                            else:
-                                raise ValueError(f"Invalid linear name: {linear}")
-
-                            adapter = loras_dict.get(adapter_name, None)
-
-                            if adapter:
-                                p_weight = getattr(adapter, "base_layer_").weight
-                                lora_a_weight = getattr(adapter, "lora_a_").weight
-                                lora_b_weight = getattr(adapter, "lora_b_").weight
-                                t_weight = lora_b_weight @ lora_a_weight + p_weight
-
-                                linear_key = linear.rstrip("_")
-                                pretrained_layer_weights.append({linear_key: p_weight})
-                                tuned_layer_weights.append({linear_key: t_weight})
-
-                            # MOE 特定逻辑
-                            if (
-                                is_moe
-                                and hasattr(layer.mlp_, "moes_")
-                                and adapter_name in layer.mlp_.moes_
-                            ):
-                                profile_matrix = layer.mlp_.moes_[
-                                    adapter_name
-                                ].profiler_
-                                expert_value_lists = loras_dict.values()
-                                tuned_expert_value_lists = []
-                                total_base_layer = getattr(
-                                    layer.mlp_.mlp_, linear
-                                ).base_layer_.weight
-
-                                for value in expert_value_lists:
-                                    p_weight = value.base_layer_.weight
-                                    lora_a_weight = value.lora_a_.weight
-                                    lora_b_weight = value.lora_b_.weight
-                                    t_weight = lora_b_weight @ lora_a_weight + p_weight
-                                    tuned_expert_value_lists.append(t_weight)
-
-                                final_tuned_weights = self.moe_weight_caculate(
-                                    profile_matrix, tuned_expert_value_lists
-                                )
-                                pretrained_layer_weights.append(
-                                    {linear_key: total_base_layer}
-                                )
-                                tuned_layer_weights.append(
-                                    {linear_key: final_tuned_weights}
-                                )
-
-                        except AttributeError as e:
-                            raise AttributeError(
-                                f"Error accessing attributes for linear '{linear}' in adapter '{adapter_name}': {e}"
+                        if linear in self._attn_linears:
+                            # For attention linears
+                            loras_dict = getattr(layer.self_attn_, linear).loras_
+                            analysis_result = self._process_lora_block(
+                                layer_idx,
+                                linear,
+                                adapter_name,
+                                loras_dict,
+                                moe_profile=None,
                             )
+                            if analysis_result:
+                                layer_result.append(analysis_result)
 
-            pretrained_layers_weights.append(pretrained_layer_weights)
-            tuned_layers_weights.append(tuned_layer_weights)
+                        elif linear in self._mlp_linears:
+                            # For MLP linears
+                            loras_dict = getattr(layer.mlp_.mlp_, linear).loras_
+                            analysis_result = self._process_lora_block(
+                                layer_idx,
+                                linear,
+                                adapter_name,
+                                loras_dict,
+                                moe_profile=None,
+                            )
+                            if analysis_result:
+                                layer_result.append(analysis_result)
+                        else:
+                            raise ValueError(f"Invalid linear name: {linear}")
 
-        return pretrained_layers_weights, tuned_layers_weights
+            final_result.append(layer_result)
 
-    @staticmethod
-    def svd_analysis(
-        p_weights: list, f_weights: list, n: int = 9, device: str = "cuda:0"
-    ) -> List:
-        """
-        对比分析 SVD 分解的权重
-        :param p_weights: 预训练权重
-        :param f_weights: 微调权重
-        :param n: SVD 分解的 top N 奇异值
-        :param device: 计算设备
-        :return: 分析结果
-        """
-        results = []
+        return final_result
 
-        for layer_idx, (p_layer, f_layer) in enumerate(zip(p_weights, f_weights)):
-            layer_results = []
-            for key in p_layer.keys():
-                p_tensor = (
-                    p_layer[key].to(device)
-                    if isinstance(p_layer[key], torch.Tensor)
-                    else torch.tensor(p_layer[key], device=device)
-                )
-                f_tensor = (
-                    f_layer[key].to(device)
-                    if isinstance(f_layer[key], torch.Tensor)
-                    else torch.tensor(f_layer[key], device=device)
-                )
+    def _moe_weight_traverse(
+        self, target_linears_list: List[Dict[str, List[str]]]
+    ) -> List[List[Dict[str, List[float]]]]:
+        final_result = []
 
-                p_u, _, _ = torch.linalg.svd(p_tensor, full_matrices=False)
-                f_u, _, _ = torch.linalg.svd(f_tensor, full_matrices=False)
+        for layer_idx, layer in enumerate(self.model.model_.layers_):
+            layer_result = []
+            for item in target_linears_list:
+                for adapter_name, linear_lst in item.items():
+                    for linear in linear_lst:
+                        if linear in self._attn_linears:
+                            # MoE in attention linears
+                            block = getattr(layer.self_attn_, linear)
+                            loras_dict = block.loras_
+                            moes_dict = getattr(block, "moes_", {})
 
-                n_min = min(n, p_u.shape[1], f_u.shape[1])
-                p_top_n = p_u[:, :n_min]
-                f_top_n = f_u[:, :n_min]
+                            if adapter_name in moes_dict and block.moes_:
+                                profile_matrix = moes_dict[adapter_name].profiler_
+                                analysis_result = self._process_lora_block(
+                                    layer_idx,
+                                    linear,
+                                    adapter_name,
+                                    loras_dict,
+                                    moe_profile=profile_matrix,
+                                )
+                                if analysis_result:
+                                    layer_result.append(analysis_result)
+                            else:
+                                # Normal scenario if no MoE
+                                analysis_result = self._process_lora_block(
+                                    layer_idx,
+                                    linear,
+                                    adapter_name,
+                                    loras_dict,
+                                    moe_profile=None,
+                                )
+                                if analysis_result:
+                                    layer_result.append(analysis_result)
 
-                similarity = torch.mm(p_top_n.T, f_top_n)
-                p_norms = torch.norm(p_top_n.T, dim=1, keepdim=True)
-                f_norms = torch.norm(f_top_n, dim=0, keepdim=True)
-                similarity = similarity / (p_norms * f_norms)
-                avg_similarity = similarity.mean().item()
+                        elif linear in self._mlp_linears:
+                            # MoE in MLP linears
+                            block = getattr(layer.mlp_.mlp_, linear)
+                            loras_dict = block.loras_
+                            moes_dict = getattr(layer.mlp_, "moes_", {})
 
-                layer_results.append({key: avg_similarity})
-            results.append(layer_results)
+                            if adapter_name in moes_dict and layer.mlp_.moes_:
+                                profile_matrix = moes_dict[adapter_name].profiler_
+                                analysis_result = self._process_lora_block(
+                                    layer_idx,
+                                    linear,
+                                    adapter_name,
+                                    loras_dict,
+                                    moe_profile=profile_matrix,
+                                )
+                                if analysis_result:
+                                    layer_result.append(analysis_result)
+                            else:
+                                # Normal scenario if no MoE
+                                analysis_result = self._process_lora_block(
+                                    layer_idx,
+                                    linear,
+                                    adapter_name,
+                                    loras_dict,
+                                    moe_profile=None,
+                                )
+                                if analysis_result:
+                                    layer_result.append(analysis_result)
 
-        return results
+                        else:
+                            raise ValueError(f"Invalid linear name: {linear}")
 
-    def process(self) -> List:
-        """
-        执行处理流程
-        :return: SVD 分析结果
-        """
-        keys_list = self.keys_extraction()
-        mapped_keys = self.mapping(keys_list)
+            final_result.append(layer_result)
 
-        if self.config.moe_flag:
-            weights = self.weight_traverse(mapped_keys, is_moe=True)
-        else:
-            weights = self.weight_traverse(mapped_keys)
-
-        return self.svd_analysis(weights[0], weights[1])
+        return final_result

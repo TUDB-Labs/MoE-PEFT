@@ -147,7 +147,7 @@ def init_adapter_config(
         config["cutoff_len"] = llm_model.max_seq_len_
         logging.info(f"Setting cutoff_len to {llm_model.max_seq_len_} automatically.")
 
-    for lora_config in config["lora"]:  # 对config中的每个adapter进行初始化
+    for lora_config in config["lora"]:
         adapter_name = lora_config["name"]
         adapter_path = f"{args.dir}{os.sep}{adapter_name}"
         if not args.load_adapter and os.path.exists(adapter_path):
@@ -201,7 +201,7 @@ def inference(
         for config in configs:
             config.prompts = [input_raw]
         callback = None if args.disable_log else inference_callback
-        outputs = moe_peft.generate(  # 此处已经配置好Genconfig，开始分词并且逐渐生成切片后的向量
+        outputs = moe_peft.generate(
             model,
             tokenizer,
             configs,
@@ -260,10 +260,6 @@ if __name__ == "__main__":
     tokenizer, model = load_base_model()
 
     adapters = init_adapter_config(config, model)
-
-    # if args.svd_ana:  # 抓取lora weight成功
-    #     moe_peft.process(model, config)
-    #     quit()
 
     moe_peft_executor.empty_cache()
 
