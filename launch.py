@@ -100,6 +100,8 @@ def gen_config(
     use_dora: bool = None,
     use_rslora: bool = None,
     group_by_length: bool = None,
+    router_profile: bool = None,
+    svd_ana: bool = None,
 ):
     import moe_peft
 
@@ -167,6 +169,12 @@ def gen_config(
             update_record(lora_config, "use_dora", use_dora)
             update_record(lora_config, "use_rslora", use_rslora)
             update_record(lora_config, "group_by_length", group_by_length)
+            update_record(lora_config, "router_profile", router_profile)
+
+            if svd_ana:
+                update_record(lora_config, "router_profile", True)
+                update_record(lora_config, "svd_analysis", svd_ana)
+
             template_obj["lora"].append(lora_config)
             index += 1
 

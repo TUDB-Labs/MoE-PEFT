@@ -7,6 +7,7 @@ from typing import Dict, List
 import torch
 
 from .adapters import MixLoraConfig
+from .analysts import SVDProcessor
 from .common import InputData, LLMBatchConfig, LLMModelInput, Prompt
 from .model import LLMModel
 from .tasks import BasicMetric, BasicTask, CommonSenseTask, task_dict
@@ -19,7 +20,10 @@ class EvaluateConfig:
     task_name: str = None
     data_path: str = None
     batch_size: int = 16
-    router_profile: bool = False
+    router_profile: bool = False  # 决定是否分析专家负载
+    svd_ana: bool = False  # 是否进行svd分析
+    moe_flag: bool = False  # 做svd分析时标志是否为moe方法
+    target_modules: Dict = None  # svd分析时取线性层
     # Do not set these manually
     task_: BasicTask = None
     data_: List[InputData] = None
@@ -44,6 +48,10 @@ class EvaluateConfig:
         adapter_name = config["name"]
         data_path = config.get("data", None)
         task_list = config.get("task_name", "casual").split(";")
+        profile = config.get("router_profile", False)
+        svd_ana = config.get("svd_analysis", False)
+        moe_flag = svd_ana and ("routing_strategy" in config)
+        target_modules = config.get("target_modules", None) if svd_ana else None
         path_list = (
             [None] * len(task_list) if data_path is None else data_path.split(";")
         )
@@ -57,6 +65,10 @@ class EvaluateConfig:
                     task_name=task_name_,
                     data_path=data_path_,
                     batch_size=config["evaluate_batch_size"],
+                    router_profile=True if profile else False,
+                    svd_ana=True if svd_ana else False,
+                    moe_flag=True if moe_flag else False,
+                    target_modules=target_modules if target_modules else None,
                 )
             )
 
@@ -235,10 +247,14 @@ def _compute_result(model, configs, save_file):
                         layer.mlp_.moes_[config.adapter_name].profiler_
                     ):
                         router_statistic_[idx] += val
-                    layer.mlp_.moes_[config.adapter_name].profiler_ = None
-                result["router_profile"] = list(val / 32 for val in router_statistic_)
+                    if not config.svd_ana:
+                        layer.mlp_.moes_[config.adapter_name].profiler_ = None
+                    result["router_profile"] = list(
+                        val / 32 for val in router_statistic_
+                    )
 
-        results.append(result)
+        final_result = result
+        results.append(final_result)
 
     if save_file is not None:
         with open(save_file, "w") as f:
@@ -259,6 +275,7 @@ def evaluate(
     retrying_steps: int = 20,
     max_seq_len: int = 512,
     save_file: str = None,
+    # svd_flag: bool = False,
 ) -> Dict:
 
     if max_concurrent_jobs is None:
@@ -289,7 +306,7 @@ def evaluate(
             break
 
         try:
-            _compute_metrcis(
+            _compute_metrcis(  # 此处将分析结果打印在终端（实时变化的结果）
                 model,
                 current_configs,
                 sequence_lengths,
@@ -318,5 +335,21 @@ def evaluate(
 
         for config in current_configs:
             config.rollback_start_idx_ = config.batch_start_idx_
+
+    if config.svd_ana:
+        for config in configs:  # call analyst process
+            processor = SVDProcessor(model, config)
+            svd_result = processor.process()
+
+            file = (
+                f"svd_result: {config.adapter_name}.json"
+                if not save_file
+                else save_file
+            )
+            with open(file, "w") as f:
+                json.dump(svd_result, f, indent=4)
+            logging.info(f"saving svd_analysis result to {file}")
+
+        return _compute_result(model, configs, save_file)
 
     return _compute_result(model, configs, save_file)

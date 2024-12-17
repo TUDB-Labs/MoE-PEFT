@@ -92,7 +92,6 @@ parser.add_argument(
     action="store_true",
     help="Use deterministic algorithms to improve the reproducibility",
 )
-
 args = parser.parse_args()
 
 
@@ -261,6 +260,7 @@ if __name__ == "__main__":
         config = json.load(fp)
 
     tokenizer, model = load_base_model()
+
     adapters = init_adapter_config(config, model)
 
     moe_peft_executor.empty_cache()
@@ -286,6 +286,7 @@ if __name__ == "__main__":
             retrying_steps=config.get("eval_rollback_retrying_steps", 20),
             max_seq_len=config["cutoff_len"],
             save_file=config.get("evaluate_result", None),
+            # moe_flag=True if any("routing_strategy" in item for item in config.get("lora", None)) else False,
         )
     else:
         moe_peft.train(
