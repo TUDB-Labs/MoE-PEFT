@@ -6,7 +6,7 @@
     "train_strategy": "optim",
     "lora": [
         {
-            "name": "svd_test_total_process",
+            "name": "svd_test",
             "task_name": "arc-c",
             "optim": "adamw",
             "scheduler_type": "constant",
