@@ -343,11 +343,11 @@ def evaluate(
             svd_result = process(model, config)
 
             file = (
-                f"svd_result_{config.adapter_name}.json" if not save_file else save_file
+                f"svd_result: {config.adapter_name}.json" if not save_file else save_file
             )
             with open(file, "w") as f:
                 json.dump(svd_result, f, indent=4)
-            logging.info(f"saving svd_analysis result to {file}")
+            logging.info(f"saving svd_analysis result to [{file}]")
 
         return _compute_result(model, configs, save_file)
 

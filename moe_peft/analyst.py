@@ -43,13 +43,10 @@ def moe_weight_caculate(loading: list, lora_weights: list) -> torch.Tensor:
 def lora_weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
     attn_linears = ["wq_", "wk_", "wv_", "wo_"]
     mlp_linears = ["w1_", "w2_", "w3_"]
+    final_result = []
 
-    pretrained_layers_weights = []
-    tuned_layers_weights = []
-
-    for layer in model.model_.layers_:
-        pretrained_layer_weights = []
-        tuned_layer_weights = []
+    for layer_idx, layer in enumerate(model.model_.layers_):
+        layer_result = []
         for item in target_linears_list:
             for adapter_name, linear_lst in item.items():
                 for linear in linear_lst:
@@ -65,8 +62,14 @@ def lora_weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
                                 t_weight = lora_b_weight @ lora_a_weight + p_weight
 
                                 linear_key = linear.rstrip("_")
-                                pretrained_layer_weights.append({linear_key: p_weight})
-                                tuned_layer_weights.append({linear_key: t_weight})
+                                logging.info(f"start to analysis layer[{layer_idx}], linear[{linear_key}]'s svd decomposition result...")
+                                layer_result.append(
+                                    {
+                                        linear_key: svd_analysis(
+                                            p_weight, t_weight
+                                        )
+                                    }
+                                )
                         except AttributeError as e:
                             raise AttributeError(
                                 f"Error accessing attributes for linear '{linear}' in adapter '{adapter_name}': {e}"
@@ -84,8 +87,14 @@ def lora_weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
                                 t_weight = lora_b_weight @ lora_a_weight + p_weight
 
                                 linear_key = linear.rstrip("_")
-                                pretrained_layer_weights.append({linear_key: p_weight})
-                                tuned_layer_weights.append({linear_key: t_weight})
+                                logging.info(f"start to analysis layer[{layer_idx}], linear[{linear_key}]'s svd decomposition result...")
+                                layer_result.append(
+                                    {
+                                        linear_key: svd_analysis(
+                                            p_weight, t_weight
+                                        )
+                                    }
+                                )
                         except AttributeError as e:
                             raise AttributeError(
                                 f"Error accessing attributes for linear '{linear}' in adapter '{adapter_name}': {e}"
@@ -94,11 +103,9 @@ def lora_weight_traverse(model, target_linears_list) -> Tuple[Dict, Dict]:
                     else:
                         raise ValueError(f"Invalid linear name: {linear}")
 
-        pretrained_layers_weights.append(pretrained_layer_weights)
-        tuned_layers_weights.append(tuned_layer_weights)
+        final_result.append(layer_result)
 
-    return pretrained_layers_weights, tuned_layers_weights
-
+    return final_result
 
 def moe_weight_traverse_and_processing(model, target_linears_list) -> None:
     attn_linears = ["wq_", "wk_", "wv_", "wo_"]
@@ -134,7 +141,7 @@ def moe_weight_traverse_and_processing(model, target_linears_list) -> None:
                                 )
 
                                 linear_key = linear.rstrip("_")
-                                logging.info(f"start to analysis layer:{layer_idx}, linear:{linear_key}'s svd decomposition result...")
+                                logging.info(f"start to analysis layer[{layer_idx}], linear[{linear_key}]'s svd decomposition result...")
                                 layer_result.append(
                                     {
                                         linear_key: svd_analysis(
@@ -151,7 +158,7 @@ def moe_weight_traverse_and_processing(model, target_linears_list) -> None:
                                     t_weight = lora_b_weight @ lora_a_weight + p_weight
 
                                     linear_key = linear.rstrip("_")
-                                    logging.info(f"start to analysis layer:{layer_idx}, linear:{linear_key}'s svd decomposition result...")
+                                    logging.info(f"start to analysis layer[{layer_idx}], linear[{linear_key}]'s svd decomposition result...")
                                     layer_result.append(
                                         {
                                             linear_key: svd_analysis(p_weight, t_weight)
@@ -187,7 +194,7 @@ def moe_weight_traverse_and_processing(model, target_linears_list) -> None:
                                 )
 
                                 linear_key = linear.rstrip("_")
-                                logging.info(f"start to analysis layer:{layer_idx}, linear:{linear_key}'s svd decomposition result...")
+                                logging.info(f"start to analysis layer[{layer_idx}], linear[{linear_key}]'s svd decomposition result...")
                                 layer_result.append(
                                     {
                                         linear_key: svd_analysis(
@@ -204,7 +211,7 @@ def moe_weight_traverse_and_processing(model, target_linears_list) -> None:
                                     t_weight = lora_b_weight @ lora_a_weight + p_weight
 
                                     linear_key = linear.rstrip("_")
-                                    logging.info(f"start to analysis layer:{layer_idx}, linear:{linear_key}'s svd decomposition result...")
+                                    logging.info(f"start to analysis layer[{layer_idx}], linear[{linear_key}]'s svd decomposition result...")
                                     layer_result.append(
                                         {
                                             linear_key: svd_analysis(p_weight, t_weight)
