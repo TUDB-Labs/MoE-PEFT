@@ -690,7 +690,7 @@ class LLMModel(torch.nn.Module):
             map_location=self.device_,
             weights_only=False,
         )
-        print(lora_weight.keys())
+        # print(lora_weight.keys())
 
         self.init_adapter(lora_config, lora_weight)
         return adapter_name
