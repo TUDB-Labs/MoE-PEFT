@@ -198,10 +198,13 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
                         for attr in ['wq_', 'wk_', 'wv_', 'wo_']:
                             moes_attr = getattr(layer.self_attn_, attr).moes_
                             if config.adapter_name in moes_attr:
-                                for idx, val in enumerate(
-                                    moes_attr[config.adapter_name].profiler_
-                                ):
-                                    router_statistic_[idx] += val
+                                if moes_attr[config.adapter_name].profiler_ is not None:
+                                    for idx, val in enumerate(
+                                        moes_attr[config.adapter_name].profiler_
+                                    ):
+                                        router_statistic_[idx] += val
+                                else:
+                                    continue
                             else:
                                 continue
 
