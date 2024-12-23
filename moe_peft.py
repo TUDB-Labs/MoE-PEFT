@@ -162,7 +162,14 @@ def init_adapter_config(
                 exit(0)
 
         if args.load_adapter:
-            llm_model.load_adapter(adapter_path, adapter_name)
+            if "router_profile" in lora_config and lora_config["router_profile"]:
+                llm_model.load_adapter(
+                    adapter_path,
+                    adapter_name,
+                    True,
+                )
+            else:
+                llm_model.load_adapter(adapter_path, adapter_name)
         else:
             llm_model.init_adapter(moe_peft.adapters.lora_config_factory(lora_config))
 

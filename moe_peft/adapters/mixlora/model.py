@@ -103,6 +103,7 @@ class MixtralSparseMoe(LLMMoeBlock):
         device: torch.device,
         config: MixLoraConfig,
         gate: Optional[torch.Tensor] = None,
+        profiling_flag: Optional[bool] = False,
     ) -> None:
         super().__init__()
 
@@ -123,7 +124,7 @@ class MixtralSparseMoe(LLMMoeBlock):
         self.experts_: int = config.num_experts_
         self.topk_: int = config.top_k_
         self.jitter_noise_: float = config.jitter_noise_
-        self.router_profile_: bool = True
+        self.router_profile_: bool = True if profiling_flag else False
         self.profiler_: List[int] = None
 
         if gate is None:

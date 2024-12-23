@@ -179,7 +179,7 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
         config: EvaluateConfig = current_configs[idx]
         task: BasicTask = config.task_
         metric: BasicMetric = config.metric_
-        start_idx = output.batch_start_idx_
+        start_idx = output.batch_start_idx_ 
         end_idx = output.batch_end_idx_
         logits = output.logits
 
@@ -252,23 +252,35 @@ def _compute_result(model, configs, save_file):
         result["metrics"] = compute_results
         if config.router_profile:
             adapter_config = model.adapter_configs_[config.adapter_name]
-            if isinstance(adapter_config, MixLoraConfig):
+            if isinstance(adapter_config, (MixLoraConfig, MolaConfig, LoraMoeConfig)):
                 router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
                 for layer in model.model_.layers_:
-                    if config.adapter_name not in layer.mlp_.moes_:
-                        continue
-                    for idx, val in enumerate(
-                        layer.mlp_.moes_[config.adapter_name].profiler_
-                    ):
-                        router_statistic_[idx] += val
-                    if not config.svd_ana:
-                        layer.mlp_.moes_[config.adapter_name].profiler_ = None
-                    result["router_profile"] = list(
-                        val / 32 for val in router_statistic_
-                    )
+                    if config.adapter_name in layer.mlp_.moes_:
+                        for idx, val in enumerate(
+                            layer.mlp_.moes_[config.adapter_name].profiler_
+                        ):
+                            router_statistic_[idx] += val
 
-        final_result = result
-        results.append(final_result)
+                        if not config.svd_ana and config.router_profile:
+                            layer.mlp_.moes_[config.adapter_name].profiler_ = None               
+                        
+                    else:
+                        for attr in ['wq_', 'wk_', 'wv_', 'wo_']:
+                            moes_attr = getattr(layer.self_attn_, attr).moes_
+                            if config.adapter_name in moes_attr:
+                                if moes_attr[config.adapter_name].profiler_ is not None:
+                                    for idx, val in enumerate(
+                                        moes_attr[config.adapter_name].profiler_
+                                    ):
+                                        router_statistic_[idx] += val
+                                if not config.svd_ana and config.router_profile:
+                                    moes_attr[config.adapter_name].profiler_ = None
+
+                    result["router_profile"] = list(
+                            val / 32 for val in router_statistic_
+                        )
+
+        results.append(result)
 
     if save_file is not None:
         with open(save_file, "w") as f:
@@ -289,7 +301,6 @@ def evaluate(
     retrying_steps: int = 20,
     max_seq_len: int = 512,
     save_file: str = None,
-    # svd_flag: bool = False,
 ) -> Dict:
 
     if max_concurrent_jobs is None:

@@ -84,6 +84,7 @@ class MolaSparseMoe(LLMMoeBlock):
         device: torch.device,
         config: MolaConfig,
         gate: Optional[torch.Tensor] = None,
+        profiling_flag: Optional[bool] = False,
     ) -> None:
         super().__init__()
 
@@ -99,7 +100,7 @@ class MolaSparseMoe(LLMMoeBlock):
         self.experts_ = config.num_experts_
         self.topk_ = config.top_k_
         self.router_logits_: torch.Tensor = None
-        self.router_profile_: bool = True
+        self.router_profile_: bool = profiling_flag
         self.profiler_: List[int] = None
 
         if gate is None:
@@ -150,9 +151,9 @@ class MolaSparseMoe(LLMMoeBlock):
         routing_weights, selected_experts = torch.topk(
             routing_weights_before, self.topk_, dim=-1
         )
- 
+
         self._profiling(batch_size, sequence_length, selected_experts)
-        print(selected_experts)
+        # print(selected_experts)
 
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
 

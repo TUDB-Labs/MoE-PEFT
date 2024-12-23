@@ -16,6 +16,7 @@ class LoraMoe(LLMMoeBlock):
         device: torch.device,
         config: LoraMoeConfig,
         gate: Optional[torch.Tensor] = None,
+        profiling_flag: Optional[bool] = False,
     ) -> None:
         super().__init__()
 
@@ -30,7 +31,7 @@ class LoraMoe(LLMMoeBlock):
         )
         self.experts_ = config.num_experts_
         self.router_logits_: torch.Tensor = None
-        self.router_profile_: bool = False
+        self.router_profile_: bool = True if profiling_flag else False
         self.profiler_: List[int] = None
         self.profile_flag_: bool = False
 

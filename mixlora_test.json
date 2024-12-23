@@ -33,7 +33,7 @@
             "top_k": 2,
             "group_by_length": false,
             "router_profile": true,
-            "svd_analysis": true
+            "svd_ana": true
         }
     ]
 }
