@@ -176,19 +176,15 @@ def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
         ),
     )
 
+
 def _accumulate_router_statistic(model, config, reset_profile=False):
-    """
-    将收集 router_statistic_ 的重复逻辑提取到这个函数中。
-    
-    :param model: 包含多层 layer 的模型对象
-    :param config: EvaluateConfig 实例，里面包含 router_profile / adapter_name 等信息
-    :param reset_profile: 是否需要在收集完统计量后，将 profiler_ 重置为 None
-    :return: 如果不符合条件(非 MixLoraConfig/MolaConfig)，返回 None；否则返回 router_statistic_ 列表
-    """
     adapter_config = model.adapter_configs_[config.adapter_name]
 
     # 仅当 adapter_config 属于 (MixLoraConfig, MolaConfig) 且不属于 LoraMoeConfig 才进行统计
-    if not (isinstance(adapter_config, (MixLoraConfig, MolaConfig)) and not isinstance(adapter_config, LoraMoeConfig)):
+    if not (
+        isinstance(adapter_config, (MixLoraConfig, MolaConfig))
+        and not isinstance(adapter_config, LoraMoeConfig)
+    ):
         return None
 
     router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
@@ -210,7 +206,9 @@ def _accumulate_router_statistic(model, config, reset_profile=False):
                 moes_attr = getattr(layer.self_attn_, attr).moes_
                 if config.adapter_name in moes_attr:
                     if moes_attr[config.adapter_name].profiler_ is not None:
-                        for idx, val in enumerate(moes_attr[config.adapter_name].profiler_):
+                        for idx, val in enumerate(
+                            moes_attr[config.adapter_name].profiler_
+                        ):
                             router_statistic_[idx] += val
                     # 如果 profiler_ 为 None，或不在 moes_attr 中，则跳过
                 # 如果 adapter_name 不在 moes_attr 中，也跳过
@@ -220,7 +218,9 @@ def _accumulate_router_statistic(model, config, reset_profile=False):
                 moes_attr = getattr(layer.mlp_.mlp_, attr).moes_
                 if config.adapter_name in moes_attr:
                     if moes_attr[config.adapter_name].profiler_ is not None:
-                        for idx, val in enumerate(moes_attr[config.adapter_name].profiler_):
+                        for idx, val in enumerate(
+                            moes_attr[config.adapter_name].profiler_
+                        ):
                             router_statistic_[idx] += val
                     # 同上，不在 moes_attr 或 profiler_ 为 None，则跳过
 
@@ -241,11 +241,13 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
             router_statistic_ = _accumulate_router_statistic(
                 model,
                 config,
-                reset_profile=False  # 在 _compute_metrcis 中并未要求重置 profiler_
+                reset_profile=False,  # 在 _compute_metrcis 中并未要求重置 profiler_
             )
             if router_statistic_ is not None and any(router_statistic_):
                 for r_idx, val in enumerate(router_statistic_):
-                    logging.info(f"{config.adapter_name}: expert {r_idx}, load = {val / 32}")
+                    logging.info(
+                        f"{config.adapter_name}: expert {r_idx}, load = {val / 32}"
+                    )
 
         # 以下为原先的 logits 处理和 metric 计算逻辑
         batch_size = logits.shape[0]
@@ -269,8 +271,7 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
             raise ValueError(f"unknown task type {task.task_type_}")
 
         metric.add_batch(
-            predictions=pooled_logits.detach().cpu(),
-            references=labels.detach().cpu()
+            predictions=pooled_logits.detach().cpu(), references=labels.detach().cpu()
         )
         logging.info(f"{config.adapter_name} evaluate data:")
         logging.info(f"    step: {config.batch_start_idx_}/{len(config.data_)}")
@@ -294,7 +295,9 @@ def _compute_result(model, configs, save_file):
             router_statistic_ = _accumulate_router_statistic(
                 model,
                 config,
-                reset_profile=(not getattr(config, "svd_ana", False) and config.router_profile)
+                reset_profile=(
+                    not getattr(config, "svd_ana", False) and config.router_profile
+                ),
             )
             if router_statistic_ is not None and any(router_statistic_):
                 result["router_profile"] = list(val / 32 for val in router_statistic_)
