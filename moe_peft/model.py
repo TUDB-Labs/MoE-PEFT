@@ -231,7 +231,7 @@ def init_lora_layer_weight(  # 将LoRA weight attach到不同的线性层上
                         if lora_weights is not None
                         else None
                     ),
-                    profiling_flag=profiling_flag
+                    profiling_flag=profiling_flag,
                 )
 
             for expert_idx in range(lora_config.num_experts_):
@@ -595,11 +595,9 @@ class LLMModel(torch.nn.Module):
     def init_adapter(
         self,
         config: AdapterConfig,
-        weight: Optional[
-            Dict[str, torch.Tensor]
-        ] = None,
+        weight: Optional[Dict[str, torch.Tensor]] = None,
         profiling_flag: Optional[bool] = False,
-        ):
+    ):
         # Patch for MixLoRA
         if isinstance(config, MixLoraConfig) and config.act_fn_ is None:
             config.act_fn_ = self.config_.hidden_act_
@@ -678,10 +676,11 @@ class LLMModel(torch.nn.Module):
         return lora_config, lora_weight
 
     def load_adapter(
-            self, name_or_path: str,
-            adapter_name: Optional[str] = None,
-            profiling_flag: Optional[bool] = False,
-            ):
+        self,
+        name_or_path: str,
+        adapter_name: Optional[str] = None,
+        profiling_flag: Optional[bool] = False,
+    ):
         if adapter_name is None:
             adapter_name = name_or_path
 

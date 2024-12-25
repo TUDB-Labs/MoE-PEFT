@@ -1,5 +1,5 @@
 import math
-from typing import Optional, List
+from typing import List, Optional
 
 import torch
 import torch.nn.functional as F
@@ -132,7 +132,6 @@ class MolaSparseMoe(LLMMoeBlock):
             for idx in range(self.experts_):
                 pressure = (router_statistic_[idx] / batch_size) / sequence_length
                 self.profiler_[idx] = (self.profiler_[idx] + pressure) / 2
-            
 
     def forward(
         self,

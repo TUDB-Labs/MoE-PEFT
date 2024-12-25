@@ -6,7 +6,7 @@ from typing import Dict, List
 
 import torch
 
-from .adapters import MixLoraConfig, LoraMoeConfig, MolaConfig
+from .adapters import LoraMoeConfig, MixLoraConfig, MolaConfig
 from .analysts import SVDProcessor
 from .common import InputData, LLMBatchConfig, LLMModelInput, Prompt
 from .model import LLMModel
@@ -106,7 +106,10 @@ class EvaluateConfig:
 def _prepare_tasks(model, tokenizer, configs):
     for config in configs:
         config.prepare(tokenizer, model.device_)
-        if not isinstance(model.adapter_configs_[config.adapter_name], (MixLoraConfig, MolaConfig, LoraMoeConfig)):
+        if not isinstance(
+            model.adapter_configs_[config.adapter_name],
+            (MixLoraConfig, MolaConfig, LoraMoeConfig),
+        ):
             continue
         for layer in model.model_.layers_:
             if config.adapter_name in layer.mlp_.moes_:
@@ -179,13 +182,15 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
         config: EvaluateConfig = current_configs[idx]
         task: BasicTask = config.task_
         metric: BasicMetric = config.metric_
-        start_idx = output.batch_start_idx_ 
+        start_idx = output.batch_start_idx_
         end_idx = output.batch_end_idx_
         logits = output.logits
 
         if config.router_profile:
             adapter_config = model.adapter_configs_[config.adapter_name]
-            if isinstance(adapter_config, (MixLoraConfig, MolaConfig, LoraMoeConfig)):
+            if isinstance(
+                adapter_config, (MixLoraConfig, MolaConfig)
+            ) and not isinstance(adapter_config, LoraMoeConfig):
                 router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
                 for layer in model.model_.layers_:
                     if config.adapter_name in layer.mlp_.moes_:
@@ -195,7 +200,7 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
                             router_statistic_[idx] += val
 
                     else:
-                        for attr in ['wq_', 'wk_', 'wv_', 'wo_']:
+                        for attr in ["wq_", "wk_", "wv_", "wo_"]:
                             moes_attr = getattr(layer.self_attn_, attr).moes_
                             if config.adapter_name in moes_attr:
                                 if moes_attr[config.adapter_name].profiler_ is not None:
@@ -208,10 +213,24 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
                             else:
                                 continue
 
-                for idx, val in enumerate(router_statistic_):
-                    logging.info(
-                        f"{config.adapter_name}: expert {idx}, load = {val / 32}"
-                    )
+                        for attr in ["w1_", "w2_", "w3_"]:
+                            moes_attr = getattr(layer.mlp_.mlp_, attr).moes_
+                            if config.adapter_name in moes_attr:
+                                if moes_attr[config.adapter_name].profiler_ is not None:
+                                    for idx, val in enumerate(
+                                        moes_attr[config.adapter_name].profiler_
+                                    ):
+                                        router_statistic_[idx] += val
+                                else:
+                                    continue
+                            else:
+                                continue
+
+                if any(router_statistic_):
+                    for idx, val in enumerate(router_statistic_):
+                        logging.info(
+                            f"{config.adapter_name}: expert {idx}, load = {val / 32}"
+                        )
 
         batch_size = logits.shape[0]
         pooled_logits = logits[
@@ -252,7 +271,9 @@ def _compute_result(model, configs, save_file):
         result["metrics"] = compute_results
         if config.router_profile:
             adapter_config = model.adapter_configs_[config.adapter_name]
-            if isinstance(adapter_config, (MixLoraConfig, MolaConfig, LoraMoeConfig)):
+            if isinstance(
+                adapter_config, (MixLoraConfig, MolaConfig)
+            ) and not isinstance(adapter_config, LoraMoeConfig):
                 router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
                 for layer in model.model_.layers_:
                     if config.adapter_name in layer.mlp_.moes_:
@@ -262,10 +283,10 @@ def _compute_result(model, configs, save_file):
                             router_statistic_[idx] += val
 
                         if not config.svd_ana and config.router_profile:
-                            layer.mlp_.moes_[config.adapter_name].profiler_ = None               
-                        
+                            layer.mlp_.moes_[config.adapter_name].profiler_ = None
+
                     else:
-                        for attr in ['wq_', 'wk_', 'wv_', 'wo_']:
+                        for attr in ["wq_", "wk_", "wv_", "wo_"]:
                             moes_attr = getattr(layer.self_attn_, attr).moes_
                             if config.adapter_name in moes_attr:
                                 if moes_attr[config.adapter_name].profiler_ is not None:
@@ -273,10 +294,26 @@ def _compute_result(model, configs, save_file):
                                         moes_attr[config.adapter_name].profiler_
                                     ):
                                         router_statistic_[idx] += val
-                                if not config.svd_ana and config.router_profile:
-                                    moes_attr[config.adapter_name].profiler_ = None
+                                else:
+                                    continue
+                            else:
+                                continue
 
-                    result["router_profile"] = list(
+                        for attr in ["w1_", "w2_", "w3_"]:
+                            moes_attr = getattr(layer.mlp_.mlp_, attr).moes_
+                            if config.adapter_name in moes_attr:
+                                if moes_attr[config.adapter_name].profiler_ is not None:
+                                    for idx, val in enumerate(
+                                        moes_attr[config.adapter_name].profiler_
+                                    ):
+                                        router_statistic_[idx] += val
+                                else:
+                                    continue
+                            else:
+                                continue
+
+                    if any(router_statistic_):
+                        result["router_profile"] = list(
                             val / 32 for val in router_statistic_
                         )
 
@@ -331,7 +368,7 @@ def evaluate(
             break
 
         try:
-            _compute_metrcis(  # 此处将分析结果打印在终端（实时变化的结果）
+            _compute_metrcis(
                 model,
                 current_configs,
                 sequence_lengths,

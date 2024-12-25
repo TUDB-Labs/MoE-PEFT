@@ -87,7 +87,9 @@ def moe_layer_factory(
 ) -> torch.nn.Module:
     if config.routing_strategy_ not in moe_layer_dict:
         raise ValueError(f"Unknown routing strategy {config.routing_strategy_}")
-    return moe_layer_dict[config.routing_strategy_](in_features, device, config, gate, profiling_flag)
+    return moe_layer_dict[config.routing_strategy_](
+        in_features, device, config, gate, profiling_flag
+    )
 
 
 __all__ = [

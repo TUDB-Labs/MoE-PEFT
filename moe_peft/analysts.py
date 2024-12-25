@@ -218,7 +218,12 @@ class SVDProcessor:
                             loras_dict = block.loras_
                             moes_dict = getattr(layer.mlp_, "moes_", {})
 
-                            if adapter_name in moes_dict and layer.mlp_.moes_:
+                            if not moes_dict:
+                                moes_dict = block.moes_
+
+                            if adapter_name in moes_dict and (
+                                layer.mlp_.moes_ or block.moes_
+                            ):
                                 profile_matrix = moes_dict[adapter_name].profiler_
                                 analysis_result = self._process_lora_block(
                                     layer_idx,
