@@ -176,6 +176,56 @@ def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
         ),
     )
 
+def _accumulate_router_statistic(model, config, reset_profile=False):
+    """
+    将收集 router_statistic_ 的重复逻辑提取到这个函数中。
+    
+    :param model: 包含多层 layer 的模型对象
+    :param config: EvaluateConfig 实例，里面包含 router_profile / adapter_name 等信息
+    :param reset_profile: 是否需要在收集完统计量后，将 profiler_ 重置为 None
+    :return: 如果不符合条件(非 MixLoraConfig/MolaConfig)，返回 None；否则返回 router_statistic_ 列表
+    """
+    adapter_config = model.adapter_configs_[config.adapter_name]
+
+    # 仅当 adapter_config 属于 (MixLoraConfig, MolaConfig) 且不属于 LoraMoeConfig 才进行统计
+    if not (isinstance(adapter_config, (MixLoraConfig, MolaConfig)) and not isinstance(adapter_config, LoraMoeConfig)):
+        return None
+
+    router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
+
+    # 遍历模型每一层，收集 profiler_ 中的计数
+    for layer in model.model_.layers_:
+        # 如果当前 adapter 在 MLP 的 moes_ 中
+        if config.adapter_name in layer.mlp_.moes_:
+            for idx, val in enumerate(layer.mlp_.moes_[config.adapter_name].profiler_):
+                router_statistic_[idx] += val
+
+            # 仅在需要且满足条件时，重置 profiler_
+            if reset_profile:
+                layer.mlp_.moes_[config.adapter_name].profiler_ = None
+
+        else:
+            # 自注意力
+            for attr in ["wq_", "wk_", "wv_", "wo_"]:
+                moes_attr = getattr(layer.self_attn_, attr).moes_
+                if config.adapter_name in moes_attr:
+                    if moes_attr[config.adapter_name].profiler_ is not None:
+                        for idx, val in enumerate(moes_attr[config.adapter_name].profiler_):
+                            router_statistic_[idx] += val
+                    # 如果 profiler_ 为 None，或不在 moes_attr 中，则跳过
+                # 如果 adapter_name 不在 moes_attr 中，也跳过
+
+            # MLP
+            for attr in ["w1_", "w2_", "w3_"]:
+                moes_attr = getattr(layer.mlp_.mlp_, attr).moes_
+                if config.adapter_name in moes_attr:
+                    if moes_attr[config.adapter_name].profiler_ is not None:
+                        for idx, val in enumerate(moes_attr[config.adapter_name].profiler_):
+                            router_statistic_[idx] += val
+                    # 同上，不在 moes_attr 或 profiler_ 为 None，则跳过
+
+    return router_statistic_
+
 
 def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, outputs):
     for idx, output in enumerate(outputs):
@@ -186,52 +236,18 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
         end_idx = output.batch_end_idx_
         logits = output.logits
 
+        # 提取 router_statistic_ 的逻辑，统一由 _accumulate_router_statistic 函数处理
         if config.router_profile:
-            adapter_config = model.adapter_configs_[config.adapter_name]
-            if isinstance(
-                adapter_config, (MixLoraConfig, MolaConfig)
-            ) and not isinstance(adapter_config, LoraMoeConfig):
-                router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
-                for layer in model.model_.layers_:
-                    if config.adapter_name in layer.mlp_.moes_:
-                        for idx, val in enumerate(
-                            layer.mlp_.moes_[config.adapter_name].profiler_
-                        ):
-                            router_statistic_[idx] += val
+            router_statistic_ = _accumulate_router_statistic(
+                model,
+                config,
+                reset_profile=False  # 在 _compute_metrcis 中并未要求重置 profiler_
+            )
+            if router_statistic_ is not None and any(router_statistic_):
+                for r_idx, val in enumerate(router_statistic_):
+                    logging.info(f"{config.adapter_name}: expert {r_idx}, load = {val / 32}")
 
-                    else:
-                        for attr in ["wq_", "wk_", "wv_", "wo_"]:
-                            moes_attr = getattr(layer.self_attn_, attr).moes_
-                            if config.adapter_name in moes_attr:
-                                if moes_attr[config.adapter_name].profiler_ is not None:
-                                    for idx, val in enumerate(
-                                        moes_attr[config.adapter_name].profiler_
-                                    ):
-                                        router_statistic_[idx] += val
-                                else:
-                                    continue
-                            else:
-                                continue
-
-                        for attr in ["w1_", "w2_", "w3_"]:
-                            moes_attr = getattr(layer.mlp_.mlp_, attr).moes_
-                            if config.adapter_name in moes_attr:
-                                if moes_attr[config.adapter_name].profiler_ is not None:
-                                    for idx, val in enumerate(
-                                        moes_attr[config.adapter_name].profiler_
-                                    ):
-                                        router_statistic_[idx] += val
-                                else:
-                                    continue
-                            else:
-                                continue
-
-                if any(router_statistic_):
-                    for idx, val in enumerate(router_statistic_):
-                        logging.info(
-                            f"{config.adapter_name}: expert {idx}, load = {val / 32}"
-                        )
-
+        # 以下为原先的 logits 处理和 metric 计算逻辑
         batch_size = logits.shape[0]
         pooled_logits = logits[
             torch.arange(batch_size, device=logits.device),
@@ -242,6 +258,7 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
             dtype=task.label_dtype_,
             device=logits.device,
         )
+
         if task.task_type_ == "common_sense":
             pooled_logits = pooled_logits[:, config.label_indices_]
             pooled_logits = pooled_logits.softmax(-1).argmax(-1)
@@ -252,7 +269,8 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
             raise ValueError(f"unknown task type {task.task_type_}")
 
         metric.add_batch(
-            predictions=pooled_logits.detach().cpu(), references=labels.detach().cpu()
+            predictions=pooled_logits.detach().cpu(),
+            references=labels.detach().cpu()
         )
         logging.info(f"{config.adapter_name} evaluate data:")
         logging.info(f"    step: {config.batch_start_idx_}/{len(config.data_)}")
@@ -269,53 +287,17 @@ def _compute_result(model, configs, save_file):
         }
         compute_results = config.metric_.compute()
         result["metrics"] = compute_results
+
+        # 提取 router_statistic_ 的逻辑，统一由 _accumulate_router_statistic 函数处理
+        # 此时根据原逻辑，如果不是 svd_ana，并且需要 router_profile，则要重置 profiler_
         if config.router_profile:
-            adapter_config = model.adapter_configs_[config.adapter_name]
-            if isinstance(
-                adapter_config, (MixLoraConfig, MolaConfig)
-            ) and not isinstance(adapter_config, LoraMoeConfig):
-                router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
-                for layer in model.model_.layers_:
-                    if config.adapter_name in layer.mlp_.moes_:
-                        for idx, val in enumerate(
-                            layer.mlp_.moes_[config.adapter_name].profiler_
-                        ):
-                            router_statistic_[idx] += val
-
-                        if not config.svd_ana and config.router_profile:
-                            layer.mlp_.moes_[config.adapter_name].profiler_ = None
-
-                    else:
-                        for attr in ["wq_", "wk_", "wv_", "wo_"]:
-                            moes_attr = getattr(layer.self_attn_, attr).moes_
-                            if config.adapter_name in moes_attr:
-                                if moes_attr[config.adapter_name].profiler_ is not None:
-                                    for idx, val in enumerate(
-                                        moes_attr[config.adapter_name].profiler_
-                                    ):
-                                        router_statistic_[idx] += val
-                                else:
-                                    continue
-                            else:
-                                continue
-
-                        for attr in ["w1_", "w2_", "w3_"]:
-                            moes_attr = getattr(layer.mlp_.mlp_, attr).moes_
-                            if config.adapter_name in moes_attr:
-                                if moes_attr[config.adapter_name].profiler_ is not None:
-                                    for idx, val in enumerate(
-                                        moes_attr[config.adapter_name].profiler_
-                                    ):
-                                        router_statistic_[idx] += val
-                                else:
-                                    continue
-                            else:
-                                continue
-
-                    if any(router_statistic_):
-                        result["router_profile"] = list(
-                            val / 32 for val in router_statistic_
-                        )
+            router_statistic_ = _accumulate_router_statistic(
+                model,
+                config,
+                reset_profile=(not getattr(config, "svd_ana", False) and config.router_profile)
+            )
+            if router_statistic_ is not None and any(router_statistic_):
+                result["router_profile"] = list(val / 32 for val in router_statistic_)
 
         results.append(result)
 
