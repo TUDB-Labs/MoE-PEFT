@@ -16,10 +16,12 @@ def main(
     save_file: str = None,
     batch_size: int = 32,
     router_profile: bool = False,
+    verbose: bool = False,
+    lora_only: bool = False,
     device: str = moe_peft.executor.default_device_name(),
 ):
-
-    moe_peft.setup_logging("INFO")
+    if verbose:
+        moe_peft.setup_logging("INFO")
 
     if not moe_peft.executor.check_available():
         exit(-1)
@@ -32,22 +34,35 @@ def main(
         load_dtype=torch.bfloat16 if load_16bit else torch.float32,
     )
     tokenizer = moe_peft.Tokenizer(base_model)
+
+    if not lora_only:
+        model.init_adapter(moe_peft.AdapterConfig(adapter_name=base_model))
+
+        evaluate_paramas = [
+            moe_peft.EvaluateConfig(
+                adapter_name=base_model,
+                task_name=task_name,
+                data_path=data_path,
+                batch_size=batch_size,
+            )
+        ]
+    else:
+        evaluate_paramas = []
+
     if lora_weights:
         adapter_name = model.load_adapter(lora_weights)
-    else:
-        adapter_name = model.init_adapter(
-            moe_peft.AdapterConfig(adapter_name="default")
+
+        evaluate_paramas.append(
+            moe_peft.EvaluateConfig(
+                adapter_name=adapter_name,
+                task_name=task_name,
+                data_path=data_path,
+                batch_size=batch_size,
+                router_profile=router_profile,
+            )
         )
 
-    evaluate_paramas = moe_peft.EvaluateConfig(
-        adapter_name=adapter_name,
-        task_name=task_name,
-        data_path=data_path,
-        batch_size=batch_size,
-        router_profile=router_profile,
-    )
-
-    moe_peft.evaluate(model, tokenizer, [evaluate_paramas], save_file=save_file)
+    moe_peft.evaluate(model, tokenizer, evaluate_paramas, save_file=save_file)
 
 
 if __name__ == "__main__":
