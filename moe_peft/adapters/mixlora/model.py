@@ -103,6 +103,7 @@ class MixtralSparseMoe(LLMMoeBlock):
         device: torch.device,
         config: MixLoraConfig,
         gate: Optional[torch.Tensor] = None,
+        profiling_flag: Optional[bool] = False,
     ) -> None:
         super().__init__()
 
@@ -123,7 +124,7 @@ class MixtralSparseMoe(LLMMoeBlock):
         self.experts_: int = config.num_experts_
         self.topk_: int = config.top_k_
         self.jitter_noise_: float = config.jitter_noise_
-        self.router_profile_: bool = False
+        self.router_profile_: bool = profiling_flag
         self.profiler_: List[int] = None
 
         if gate is None:
@@ -178,14 +179,16 @@ class MixtralSparseMoe(LLMMoeBlock):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.view(-1, hidden_dim).to(self.dtype_)
         # router_logits: (batch * sequence_length, n_experts)
-        router_logits = self.gate_(hidden_states)
+        router_logits = self.gate_(hidden_states)  # 在此处计算各专家的分数
 
         routing_weights = F.softmax(router_logits, dim=1, dtype=self.dtype_)
+
         routing_weights, selected_experts = torch.topk(
             routing_weights, self.topk_, dim=-1
         )
 
         self._profiling(batch_size, sequence_length, selected_experts)
+        print(selected_experts)
 
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
 

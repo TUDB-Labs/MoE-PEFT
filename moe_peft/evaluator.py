@@ -6,7 +6,8 @@ from typing import Dict, List
 
 import torch
 
-from .adapters import MixLoraConfig
+from .adapters import LoraMoeConfig, MixLoraConfig, MolaConfig
+from .analysts import SVDProcessor
 from .common import InputData, LLMBatchConfig, LLMModelInput, Prompt
 from .model import LLMModel
 from .tasks import BasicMetric, BasicTask, CommonSenseTask, task_dict
@@ -19,7 +20,10 @@ class EvaluateConfig:
     task_name: str = None
     data_path: str = None
     batch_size: int = 16
-    router_profile: bool = False
+    router_profile: bool = False  # 决定是否分析专家负载
+    svd_ana: bool = False  # 是否进行svd分析
+    moe_flag: bool = False  # 做svd分析时标志是否为moe方法
+    target_modules: Dict = None  # svd分析时取线性层
     # Do not set these manually
     task_: BasicTask = None
     data_: List[InputData] = None
@@ -44,6 +48,10 @@ class EvaluateConfig:
         adapter_name = config["name"]
         data_path = config.get("data", None)
         task_list = config.get("task_name", "casual").split(";")
+        profile = config.get("router_profile", False)
+        svd_ana = config.get("svd_analysis", False)
+        moe_flag = svd_ana and ("routing_strategy" in config)
+        target_modules = config.get("target_modules", None) if svd_ana else None
         path_list = (
             [None] * len(task_list) if data_path is None else data_path.split(";")
         )
@@ -57,6 +65,10 @@ class EvaluateConfig:
                     task_name=task_name_,
                     data_path=data_path_,
                     batch_size=config["evaluate_batch_size"],
+                    router_profile=True if profile else False,
+                    svd_ana=True if svd_ana else False,
+                    moe_flag=True if moe_flag else False,
+                    target_modules=target_modules if target_modules else None,
                 )
             )
 
@@ -94,7 +106,10 @@ class EvaluateConfig:
 def _prepare_tasks(model, tokenizer, configs):
     for config in configs:
         config.prepare(tokenizer, model.device_)
-        if not isinstance(model.adapter_configs_[config.adapter_name], MixLoraConfig):
+        if not isinstance(
+            model.adapter_configs_[config.adapter_name],
+            (MixLoraConfig, MolaConfig, LoraMoeConfig),
+        ):
             continue
         for layer in model.model_.layers_:
             if config.adapter_name in layer.mlp_.moes_:
@@ -162,6 +177,56 @@ def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
     )
 
 
+def _accumulate_router_statistic(model, config, reset_profile=False):
+    adapter_config = model.adapter_configs_[config.adapter_name]
+
+    # 仅当 adapter_config 属于 (MixLoraConfig, MolaConfig) 且不属于 LoraMoeConfig 才进行统计
+    if not (
+        isinstance(adapter_config, (MixLoraConfig, MolaConfig))
+        and not isinstance(adapter_config, LoraMoeConfig)
+    ):
+        return None
+
+    router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
+
+    # 遍历模型每一层，收集 profiler_ 中的计数
+    for layer in model.model_.layers_:
+        # 如果当前 adapter 在 MLP 的 moes_ 中
+        if config.adapter_name in layer.mlp_.moes_:
+            for idx, val in enumerate(layer.mlp_.moes_[config.adapter_name].profiler_):
+                router_statistic_[idx] += val
+
+            # 仅在需要且满足条件时，重置 profiler_
+            if reset_profile:
+                layer.mlp_.moes_[config.adapter_name].profiler_ = None
+
+        else:
+            # 自注意力
+            for attr in ["wq_", "wk_", "wv_", "wo_"]:
+                moes_attr = getattr(layer.self_attn_, attr).moes_
+                if config.adapter_name in moes_attr:
+                    if moes_attr[config.adapter_name].profiler_ is not None:
+                        for idx, val in enumerate(
+                            moes_attr[config.adapter_name].profiler_
+                        ):
+                            router_statistic_[idx] += val
+                    # 如果 profiler_ 为 None，或不在 moes_attr 中，则跳过
+                # 如果 adapter_name 不在 moes_attr 中，也跳过
+
+            # MLP
+            for attr in ["w1_", "w2_", "w3_"]:
+                moes_attr = getattr(layer.mlp_.mlp_, attr).moes_
+                if config.adapter_name in moes_attr:
+                    if moes_attr[config.adapter_name].profiler_ is not None:
+                        for idx, val in enumerate(
+                            moes_attr[config.adapter_name].profiler_
+                        ):
+                            router_statistic_[idx] += val
+                    # 同上，不在 moes_attr 或 profiler_ 为 None，则跳过
+
+    return router_statistic_
+
+
 def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, outputs):
     for idx, output in enumerate(outputs):
         config: EvaluateConfig = current_configs[idx]
@@ -171,22 +236,20 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
         end_idx = output.batch_end_idx_
         logits = output.logits
 
+        # 提取 router_statistic_ 的逻辑，统一由 _accumulate_router_statistic 函数处理
         if config.router_profile:
-            adapter_config = model.adapter_configs_[config.adapter_name]
-            if isinstance(adapter_config, MixLoraConfig):
-                router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
-                for layer in model.model_.layers_:
-                    if config.adapter_name not in layer.mlp_.moes_:
-                        continue
-                    for idx, val in enumerate(
-                        layer.mlp_.moes_[config.adapter_name].profiler_
-                    ):
-                        router_statistic_[idx] += val
-                for idx, val in enumerate(router_statistic_):
+            router_statistic_ = _accumulate_router_statistic(
+                model,
+                config,
+                reset_profile=False,  # 在 _compute_metrcis 中并未要求重置 profiler_
+            )
+            if router_statistic_ is not None and any(router_statistic_):
+                for r_idx, val in enumerate(router_statistic_):
                     logging.info(
-                        f"{config.adapter_name}: expert {idx}, load = {val / 32}"
+                        f"{config.adapter_name}: expert {r_idx}, load = {val / 32}"
                     )
 
+        # 以下为原先的 logits 处理和 metric 计算逻辑
         batch_size = logits.shape[0]
         pooled_logits = logits[
             torch.arange(batch_size, device=logits.device),
@@ -197,6 +260,7 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
             dtype=task.label_dtype_,
             device=logits.device,
         )
+
         if task.task_type_ == "common_sense":
             pooled_logits = pooled_logits[:, config.label_indices_]
             pooled_logits = pooled_logits.softmax(-1).argmax(-1)
@@ -226,18 +290,18 @@ def _compute_result(model, configs, save_file):
         }
         compute_results = config.metric_.compute()
         result["metrics"] = compute_results
+
+        # 提取 router_statistic_ 的逻辑，统一由 _accumulate_router_statistic 函数处理
+        # 此时根据原逻辑，如果不是 svd_ana，并且需要 router_profile，则要重置 profiler_
         if config.router_profile:
-            adapter_config = model.adapter_configs_[config.adapter_name]
-            if isinstance(adapter_config, MixLoraConfig):
-                router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
-                for layer in model.model_.layers_:
-                    if config.adapter_name not in layer.mlp_.moes_:
-                        continue
-                    for idx, val in enumerate(
-                        layer.mlp_.moes_[config.adapter_name].profiler_
-                    ):
-                        router_statistic_[idx] += val
-                    layer.mlp_.moes_[config.adapter_name].profiler_ = None
+            router_statistic_ = _accumulate_router_statistic(
+                model,
+                config,
+                reset_profile=(
+                    not getattr(config, "svd_ana", False) and config.router_profile
+                ),
+            )
+            if router_statistic_ is not None and any(router_statistic_):
                 result["router_profile"] = list(val / 32 for val in router_statistic_)
 
         results.append(result)
@@ -320,5 +384,21 @@ def evaluate(
 
         for config in current_configs:
             config.rollback_start_idx_ = config.batch_start_idx_
+
+    if config.svd_ana:
+        for config in configs:  # call analyst process
+            processor = SVDProcessor(model, config)
+            svd_result = processor.process()
+
+            file = (
+                f"svd_result: {config.adapter_name}.json"
+                if not save_file
+                else save_file
+            )
+            with open(file, "w") as f:
+                json.dump(svd_result, f, indent=4)
+            logging.info(f"saving svd_analysis result to {file}")
+
+        return _compute_result(model, configs, save_file)
 
     return _compute_result(model, configs, save_file)
