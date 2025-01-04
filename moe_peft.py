@@ -171,7 +171,15 @@ def init_adapter_config(
             else:
                 llm_model.load_adapter(adapter_path, adapter_name)
         else:
-            llm_model.init_adapter(moe_peft.adapters.lora_config_factory(lora_config))
+            if "router_profile" in lora_config and lora_config["router_profile"]:
+                llm_model.init_adapter(
+                    moe_peft.adapters.lora_config_factory(lora_config),
+                    profiling_flag=True,
+                )
+            else:
+                llm_model.init_adapter(
+                    moe_peft.adapters.lora_config_factory(lora_config)
+                )
 
         if args.inference:
             config_class = moe_peft.GenerateConfig(adapter_name=adapter_name)
@@ -291,7 +299,6 @@ if __name__ == "__main__":
             retrying_steps=config.get("eval_rollback_retrying_steps", 20),
             max_seq_len=config["cutoff_len"],
             save_file=config.get("evaluate_result", None),
-            # moe_flag=True if any("routing_strategy" in item for item in config.get("lora", None)) else False,
         )
     else:
         moe_peft.train(

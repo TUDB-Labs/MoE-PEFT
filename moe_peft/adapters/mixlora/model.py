@@ -188,7 +188,7 @@ class MixtralSparseMoe(LLMMoeBlock):
         )
 
         self._profiling(batch_size, sequence_length, selected_experts)
-        print(selected_experts)
+        # print(selected_experts)
 
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
 
