@@ -1,0 +1,172 @@
+{
+    "adapter_name": "test",
+    "lowest_avg_similarities": [
+        {
+            "avg_similarity": 0.9961680041419135,
+            "layer_index": 31,
+            "linear_name": "wv"
+        },
+        {
+            "avg_similarity": 0.9966834518644545,
+            "layer_index": 1,
+            "linear_name": "w3"
+        },
+        {
+            "avg_similarity": 0.9989770385954115,
+            "layer_index": 13,
+            "linear_name": "wv"
+        },
+        {
+            "avg_similarity": 0.9992582003275553,
+            "layer_index": 23,
+            "linear_name": "w3"
+        },
+        {
+            "avg_similarity": 0.9993714690208435,
+            "layer_index": 11,
+            "linear_name": "wv"
+        },
+        {
+            "avg_similarity": 0.9994035959243774,
+            "layer_index": 17,
+            "linear_name": "w1"
+        },
+        {
+            "avg_similarity": 0.9994427031940885,
+            "layer_index": 13,
+            "linear_name": "wo"
+        },
+        {
+            "avg_similarity": 0.999546104007297,
+            "layer_index": 20,
+            "linear_name": "wv"
+        },
+        {
+            "avg_similarity": 0.999557740158505,
+            "layer_index": 24,
+            "linear_name": "wv"
+        },
+        {
+            "avg_similarity": 0.9996044105953641,
+            "layer_index": 16,
+            "linear_name": "wv"
+        },
+        {
+            "avg_similarity": 0.9996178216404386,
+            "layer_index": 24,
+            "linear_name": "wo"
+        },
+        {
+            "avg_similarity": 0.999650948577457,
+            "layer_index": 9,
+            "linear_name": "wq"
+        },
+        {
+            "avg_similarity": 0.9996535645590888,
+            "layer_index": 21,
+            "linear_name": "wv"
+        },
+        {
+            "avg_similarity": 0.9996902280383639,
+            "layer_index": 19,
+            "linear_name": "wv"
+        },
+        {
+            "avg_similarity": 0.9996955924563937,
+            "layer_index": 22,
+            "linear_name": "wv"
+        }
+    ],
+    "lowest_individual_similarities": [
+        {
+            "similarity": 0.9838240742683411,
+            "layer_index": 31,
+            "linear_name": "wv",
+            "vector_index": 4
+        },
+        {
+            "similarity": 0.9839364886283875,
+            "layer_index": 31,
+            "linear_name": "wv",
+            "vector_index": 5
+        },
+        {
+            "similarity": 0.9852135181427002,
+            "layer_index": 1,
+            "linear_name": "w3",
+            "vector_index": 1
+        },
+        {
+            "similarity": 0.9852290749549866,
+            "layer_index": 1,
+            "linear_name": "w3",
+            "vector_index": 2
+        },
+        {
+            "similarity": 0.9952930808067322,
+            "layer_index": 13,
+            "linear_name": "wo",
+            "vector_index": 8
+        },
+        {
+            "similarity": 0.9954471588134766,
+            "layer_index": 13,
+            "linear_name": "wv",
+            "vector_index": 5
+        },
+        {
+            "similarity": 0.9954935312271118,
+            "layer_index": 13,
+            "linear_name": "wv",
+            "vector_index": 6
+        },
+        {
+            "similarity": 0.9967259764671326,
+            "layer_index": 23,
+            "linear_name": "w3",
+            "vector_index": 3
+        },
+        {
+            "similarity": 0.9967430830001831,
+            "layer_index": 23,
+            "linear_name": "w3",
+            "vector_index": 4
+        },
+        {
+            "similarity": 0.9971923232078552,
+            "layer_index": 11,
+            "linear_name": "wv",
+            "vector_index": 2
+        },
+        {
+            "similarity": 0.9971973896026611,
+            "layer_index": 11,
+            "linear_name": "wv",
+            "vector_index": 3
+        },
+        {
+            "similarity": 0.9973728656768799,
+            "layer_index": 17,
+            "linear_name": "w1",
+            "vector_index": 5
+        },
+        {
+            "similarity": 0.9973828196525574,
+            "layer_index": 17,
+            "linear_name": "w1",
+            "vector_index": 6
+        },
+        {
+            "similarity": 0.9983537793159485,
+            "layer_index": 20,
+            "linear_name": "wv",
+            "vector_index": 7
+        },
+        {
+            "similarity": 0.9983582496643066,
+            "layer_index": 20,
+            "linear_name": "wv",
+            "vector_index": 6
+        }
+    ]
+}

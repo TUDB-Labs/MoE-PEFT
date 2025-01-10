@@ -1,8 +1,8 @@
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional, Union
 
 import torch
-
+import heapq
 from .model import LLMModel
 
 
@@ -26,13 +26,23 @@ class SVDProcessor:
         self._attn_linears = ["wq_", "wk_", "wv_", "wo_"]
         self._mlp_linears = ["w1_", "w2_", "w3_"]
 
-    def process(self) -> List[List[Dict[str, List[float]]]]:
+    def process(self, all_result: Optional[bool] = False) -> Union[
+        List[List[Dict[str, List[float]]]],
+        List[Dict[str, List[float]]]
+    ]:
         target_linears_list = self._mapping(self._keys_extraction(self.config))
 
-        if self.config.moe_flag:
+        # Return the total svd analysis results
+        if self.config.moe_flag and all_result:
             return self._moe_weight_traverse(target_linears_list)
-        else:
+        elif all_result:
             return self._lora_weight_traverse(target_linears_list)
+        
+        # Return svd analysis features
+        elif self.config.moe_flag and not all_result:
+            return self._analyze_svd_data(self._moe_weight_traverse(target_linears_list), self.config)
+        else:
+            return self._analyze_svd_data(self._lora_weight_traverse(target_linears_list), self.config)
 
     def _keys_extraction(self, config) -> List[Dict[str, List[str]]]:
         name = config.adapter_name
@@ -40,6 +50,37 @@ class SVDProcessor:
         true_keys = [key for key, value in target_modules.items() if value]
         return [{name: true_keys}]
 
+    def _analyze_svd_data(self, data: List[List[Dict[str, List[float]]]], config) -> List[Dict[str, List[float]]]:
+        avg_similarities = []
+        for layer_idx, layer in enumerate(data):
+            for linear_data in layer:
+                for linear_name, similarities in linear_data.items():
+                    avg_similarity = sum(abs(sim) for sim in similarities) / len(similarities)
+                    avg_similarities.append((avg_similarity, layer_idx, linear_name))
+        lowest_avg_similarities = heapq.nsmallest(15, avg_similarities, key=lambda x: x[0])
+
+        all_similarities = []
+        for layer_idx, layer in enumerate(data):
+            for linear_data in layer:
+                for linear_name, similarities in linear_data.items():
+                    for vector_idx, similarity in enumerate(similarities):
+                        all_similarities.append((abs(similarity), layer_idx, linear_name, vector_idx))
+        lowest_similarities = heapq.nsmallest(15, all_similarities, key=lambda x: x[0])
+
+        result = {
+        "adapter_name": config.adapter_name,
+        "lowest_avg_similarities": [
+            {"avg_similarity": avg, "layer_index": layer_idx, "linear_name": linear_name}
+            for avg, layer_idx, linear_name in lowest_avg_similarities
+        ],
+        "lowest_individual_similarities": [
+            {"similarity": sim, "layer_index": layer_idx, "linear_name": linear_name, "vector_index": vector_idx}
+            for sim, layer_idx, linear_name, vector_idx in lowest_similarities
+        ]
+        }
+
+        return result
+        
     def _mapping(
         self, keys_list: List[Dict[str, List[str]]]
     ) -> List[Dict[str, List[str]]]:

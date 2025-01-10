@@ -20,10 +20,11 @@ class EvaluateConfig:
     task_name: str = None
     data_path: str = None
     batch_size: int = 16
-    router_profile: bool = False  # 决定是否分析专家负载
-    svd_ana: bool = False  # 是否进行svd分析
-    moe_flag: bool = False  # 做svd分析时标志是否为moe方法
-    target_modules: Dict = None  # svd分析时取线性层
+    router_profile: bool = False
+    svd_ana: bool = False
+    svd_cos_file: bool = False
+    moe_flag: bool = False
+    target_modules: Dict = None
     # Do not set these manually
     task_: BasicTask = None
     data_: List[InputData] = None
@@ -50,6 +51,7 @@ class EvaluateConfig:
         task_list = config.get("task_name", "casual").split(";")
         profile = config.get("router_profile", False)
         svd_ana = config.get("svd_analysis", False)
+        svd_cos_file = config.get("svd_cos_file", False)
         moe_flag = svd_ana and ("routing_strategy" in config)
         target_modules = config.get("target_modules", None) if svd_ana else None
         path_list = (
@@ -67,6 +69,7 @@ class EvaluateConfig:
                     batch_size=config["evaluate_batch_size"],
                     router_profile=True if profile else False,
                     svd_ana=True if svd_ana else False,
+                    svd_cos_file=True if svd_cos_file else False,
                     moe_flag=True if moe_flag else False,
                     target_modules=target_modules if target_modules else None,
                 )
@@ -180,7 +183,7 @@ def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
 def _accumulate_router_statistic(model, config, reset_profile=False):
     adapter_config = model.adapter_configs_[config.adapter_name]
 
-    # 仅当 adapter_config 属于 (MixLoraConfig, MolaConfig) 且不属于 LoraMoeConfig 才进行统计
+    # Only accumulate statistics if adapter_config is an instance of (MixLoraConfig, MolaConfig) and not LoraMoeConfig
     if not (
         isinstance(adapter_config, (MixLoraConfig, MolaConfig))
         and not isinstance(adapter_config, LoraMoeConfig)
@@ -189,19 +192,19 @@ def _accumulate_router_statistic(model, config, reset_profile=False):
 
     router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
 
-    # 遍历模型每一层，收集 profiler_ 中的计数
+    # Iterate through each layer of the model and collect counts from profiler_
     for layer in model.model_.layers_:
-        # 如果当前 adapter 在 MLP 的 moes_ 中
+        # If the current adapter is in the MLP's moes_
         if config.adapter_name in layer.mlp_.moes_:
             for idx, val in enumerate(layer.mlp_.moes_[config.adapter_name].profiler_):
                 router_statistic_[idx] += val
 
-            # 仅在需要且满足条件时，重置 profiler_
+            # Only reset profiler_ if needed and conditions are met
             if reset_profile:
                 layer.mlp_.moes_[config.adapter_name].profiler_ = None
 
         else:
-            # 自注意力
+            # self_attn
             for attr in ["wq_", "wk_", "wv_", "wo_"]:
                 moes_attr = getattr(layer.self_attn_, attr).moes_
                 if config.adapter_name in moes_attr:
@@ -210,8 +213,8 @@ def _accumulate_router_statistic(model, config, reset_profile=False):
                             moes_attr[config.adapter_name].profiler_
                         ):
                             router_statistic_[idx] += val
-                    # 如果 profiler_ 为 None，或不在 moes_attr 中，则跳过
-                # 如果 adapter_name 不在 moes_attr 中，也跳过
+                    # Skip if profiler_ is None or adapter_name is not in moes_attr
+                # Skip if adapter_name is not in moes_attr
 
             # MLP
             for attr in ["w1_", "w2_", "w3_"]:
@@ -222,7 +225,7 @@ def _accumulate_router_statistic(model, config, reset_profile=False):
                             moes_attr[config.adapter_name].profiler_
                         ):
                             router_statistic_[idx] += val
-                    # 同上，不在 moes_attr 或 profiler_ 为 None，则跳过
+                    # Similarly, skip if adapter_name is not in moes_attr or profiler_ is None
 
     return router_statistic_
 
@@ -236,12 +239,12 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
         end_idx = output.batch_end_idx_
         logits = output.logits
 
-        # 提取 router_statistic_ 的逻辑，统一由 _accumulate_router_statistic 函数处理
+        # Extract router_statistic_ logic and handle it uniformly with _accumulate_router_statistic
         if config.router_profile:
             router_statistic_ = _accumulate_router_statistic(
                 model,
                 config,
-                reset_profile=False,  # 在 _compute_metrcis 中并未要求重置 profiler_
+                reset_profile=False,  # In _compute_metrics, resetting profiler_ is not required
             )
             if router_statistic_ is not None and any(router_statistic_):
                 for r_idx, val in enumerate(router_statistic_):
@@ -249,7 +252,7 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
                         f"{config.adapter_name}: expert {r_idx}, load = {val / 32}"
                     )
 
-        # 以下为原先的 logits 处理和 metric 计算逻辑
+        # The following is the original logits processing and metric computation logic
         batch_size = logits.shape[0]
         pooled_logits = logits[
             torch.arange(batch_size, device=logits.device),
@@ -289,8 +292,8 @@ def _compute_result(model, configs, save_file):
         compute_results = config.metric_.compute()
         result["metrics"] = compute_results
 
-        # 提取 router_statistic_ 的逻辑，统一由 _accumulate_router_statistic 函数处理
-        # 此时根据原逻辑，如果不是 svd_ana，并且需要 router_profile，则要重置 profiler_
+        # Extract router_statistic_ logic and handle it uniformly with _accumulate_router_statistic
+        # At this point, according to the original logic, if it's not svd_ana and router_profile is needed, reset profiler_
         if config.router_profile:
             router_statistic_ = _accumulate_router_statistic(
                 model,
@@ -386,8 +389,11 @@ def evaluate(
     if config.svd_ana:
         for config in configs:  # call analyst process
             processor = SVDProcessor(model, config)
-            svd_result = processor.process()
-
+            if not config.svd_cos_file:
+                svd_result = processor.process()
+            else:
+                svd_result = processor.process(all_result=True)
+            
             file = (
                 f"svd_result: {config.adapter_name}.json"
                 if not save_file
