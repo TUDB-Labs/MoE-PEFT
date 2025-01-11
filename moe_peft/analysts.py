@@ -1,5 +1,6 @@
 import logging
 from typing import Dict, List, Optional, Union
+from collections import Counter
 
 import torch
 import heapq
@@ -50,13 +51,14 @@ class SVDProcessor:
         true_keys = [key for key, value in target_modules.items() if value]
         return [{name: true_keys}]
 
-    def _analyze_svd_data(self, data: List[List[Dict[str, List[float]]]], config) -> List[Dict[str, List[float]]]:
+    def _analyze_svd_data(self, data: List[List[Dict[str, List[float]]]], config) -> Dict:
         avg_similarities = []
         for layer_idx, layer in enumerate(data):
             for linear_data in layer:
                 for linear_name, similarities in linear_data.items():
                     avg_similarity = sum(abs(sim) for sim in similarities) / len(similarities)
                     avg_similarities.append((avg_similarity, layer_idx, linear_name))
+
         lowest_avg_similarities = heapq.nsmallest(15, avg_similarities, key=lambda x: x[0])
 
         all_similarities = []
@@ -65,18 +67,57 @@ class SVDProcessor:
                 for linear_name, similarities in linear_data.items():
                     for vector_idx, similarity in enumerate(similarities):
                         all_similarities.append((abs(similarity), layer_idx, linear_name, vector_idx))
+
         lowest_similarities = heapq.nsmallest(15, all_similarities, key=lambda x: x[0])
 
+        # 统计 lowest_avg_similarities
+        avg_layer_counter = Counter([entry[1] for entry in lowest_avg_similarities])
+        avg_linear_counter = Counter([entry[2] for entry in lowest_avg_similarities])
+
+        avg_statistics = {
+            "layer_distribution": {
+                layer_idx: count / len(lowest_avg_similarities)
+                for layer_idx, count in avg_layer_counter.items()
+            },
+            "linear_name_distribution": {
+                linear_name: count / len(lowest_avg_similarities)
+                for linear_name, count in avg_linear_counter.items()
+            }
+        }
+
+        # 统计 lowest_individual_similarities
+        individual_layer_counter = Counter([entry[1] for entry in lowest_similarities])
+        individual_linear_counter = Counter([entry[2] for entry in lowest_similarities])
+        individual_vector_counter = Counter([entry[3] for entry in lowest_similarities])
+
+        individual_statistics = {
+            "layer_distribution": {
+                layer_idx: count / len(lowest_similarities)
+                for layer_idx, count in individual_layer_counter.items()
+            },
+            "linear_name_distribution": {
+                linear_name: count / len(lowest_similarities)
+                for linear_name, count in individual_linear_counter.items()
+            },
+            "vector_index_distribution": {
+                vector_idx: count / len(lowest_similarities)
+                for vector_idx, count in individual_vector_counter.items()
+            }
+        }
+
+        # 构造结果
         result = {
-        "adapter_name": config.adapter_name,
-        "lowest_avg_similarities": [
-            {"avg_similarity": avg, "layer_index": layer_idx, "linear_name": linear_name}
-            for avg, layer_idx, linear_name in lowest_avg_similarities
-        ],
-        "lowest_individual_similarities": [
-            {"similarity": sim, "layer_index": layer_idx, "linear_name": linear_name, "vector_index": vector_idx}
-            for sim, layer_idx, linear_name, vector_idx in lowest_similarities
-        ]
+            "adapter_name": config.adapter_name,
+            "lowest_avg_similarities": [
+                {"avg_similarity": avg, "layer_index": layer_idx, "linear_name": linear_name}
+                for avg, layer_idx, linear_name in lowest_avg_similarities
+            ],
+            "lowest_avg_statistics": avg_statistics,
+            "lowest_individual_similarities": [
+                {"similarity": sim, "layer_index": layer_idx, "linear_name": linear_name, "vector_index": vector_idx}
+                for sim, layer_idx, linear_name, vector_idx in lowest_similarities
+            ],
+            "lowest_individual_statistics": individual_statistics,
         }
 
         return result

@@ -6,7 +6,7 @@
     "train_strategy": "optim",
     "lora": [
         {
-            "name": "test",
+            "name": "ztest",
             "task_name": "arc-c",
             "optim": "adamw",
             "scheduler_type": "constant",
