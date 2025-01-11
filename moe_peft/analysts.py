@@ -1,9 +1,10 @@
+import heapq
 import logging
-from typing import Dict, List, Optional, Union
 from collections import Counter
+from typing import Dict, List, Optional, Union
 
 import torch
-import heapq
+
 from .model import LLMModel
 
 
@@ -27,10 +28,9 @@ class SVDProcessor:
         self._attn_linears = ["wq_", "wk_", "wv_", "wo_"]
         self._mlp_linears = ["w1_", "w2_", "w3_"]
 
-    def process(self, all_result: Optional[bool] = False) -> Union[
-        List[List[Dict[str, List[float]]]],
-        List[Dict[str, List[float]]]
-    ]:
+    def process(
+        self, all_result: Optional[bool] = False
+    ) -> Union[List[List[Dict[str, List[float]]]], List[Dict[str, List[float]]]]:
         target_linears_list = self._mapping(self._keys_extraction(self.config))
 
         # Return the total svd analysis results
@@ -38,12 +38,16 @@ class SVDProcessor:
             return self._moe_weight_traverse(target_linears_list)
         elif all_result:
             return self._lora_weight_traverse(target_linears_list)
-        
+
         # Return svd analysis features
         elif self.config.moe_flag and not all_result:
-            return self._analyze_svd_data(self._moe_weight_traverse(target_linears_list), self.config)
+            return self._analyze_svd_data(
+                self._moe_weight_traverse(target_linears_list), self.config
+            )
         else:
-            return self._analyze_svd_data(self._lora_weight_traverse(target_linears_list), self.config)
+            return self._analyze_svd_data(
+                self._lora_weight_traverse(target_linears_list), self.config
+            )
 
     def _keys_extraction(self, config) -> List[Dict[str, List[str]]]:
         name = config.adapter_name
@@ -51,115 +55,137 @@ class SVDProcessor:
         true_keys = [key for key, value in target_modules.items() if value]
         return [{name: true_keys}]
 
-
-    def _analyze_svd_data(self, data: List[List[Dict[str, List[float]]]], config) -> Dict:
+    def _analyze_svd_data(
+        self, data: List[List[Dict[str, List[float]]]], config
+    ) -> Dict:
         avg_similarities = []
         for layer_idx, layer in enumerate(data):
             for linear_data in layer:
                 for linear_name, similarities in linear_data.items():
-                    avg_similarity = sum(abs(sim) for sim in similarities) / len(similarities)
+                    avg_similarity = sum(abs(sim) for sim in similarities) / len(
+                        similarities
+                    )
                     avg_similarities.append((avg_similarity, layer_idx, linear_name))
 
-        lowest_avg_similarities = heapq.nsmallest(15, avg_similarities, key=lambda x: x[0])
+        lowest_avg_similarities = heapq.nsmallest(
+            15, avg_similarities, key=lambda x: x[0]
+        )
 
         all_similarities = []
         for layer_idx, layer in enumerate(data):
             for linear_data in layer:
                 for linear_name, similarities in linear_data.items():
                     for vector_idx, similarity in enumerate(similarities):
-                        all_similarities.append((abs(similarity), layer_idx, linear_name, vector_idx))
+                        all_similarities.append(
+                            (abs(similarity), layer_idx, linear_name, vector_idx)
+                        )
 
         lowest_similarities = heapq.nsmallest(15, all_similarities, key=lambda x: x[0])
 
-        # 统计 lowest_avg_similarities 的分布并排序
         avg_layer_counter = Counter([entry[1] for entry in lowest_avg_similarities])
         avg_linear_counter = Counter([entry[2] for entry in lowest_avg_similarities])
 
         avg_statistics = {
             "layer_distribution": {
-                k: v for k, v in sorted(
+                k: v
+                for k, v in sorted(
                     {
                         layer_idx: count / len(lowest_avg_similarities)
                         for layer_idx, count in avg_layer_counter.items()
                     }.items(),
                     key=lambda item: item[1],
-                    reverse=True
+                    reverse=True,
                 )
             },
             "linear_name_distribution": {
-                k: v for k, v in sorted(
+                k: v
+                for k, v in sorted(
                     {
                         linear_name: count / len(lowest_avg_similarities)
                         for linear_name, count in avg_linear_counter.items()
                     }.items(),
                     key=lambda item: item[1],
-                    reverse=True
+                    reverse=True,
                 )
-            }
+            },
         }
 
-        # 统计 lowest_individual_similarities 的分布并排序
         individual_layer_counter = Counter([entry[1] for entry in lowest_similarities])
         individual_linear_counter = Counter([entry[2] for entry in lowest_similarities])
         individual_vector_counter = Counter([entry[3] for entry in lowest_similarities])
 
         individual_statistics = {
             "layer_distribution": {
-                k: v for k, v in sorted(
+                k: v
+                for k, v in sorted(
                     {
                         layer_idx: count / len(lowest_similarities)
                         for layer_idx, count in individual_layer_counter.items()
                     }.items(),
                     key=lambda item: item[1],
-                    reverse=True
+                    reverse=True,
                 )
             },
             "linear_name_distribution": {
-                k: v for k, v in sorted(
+                k: v
+                for k, v in sorted(
                     {
                         linear_name: count / len(lowest_similarities)
                         for linear_name, count in individual_linear_counter.items()
                     }.items(),
                     key=lambda item: item[1],
-                    reverse=True
+                    reverse=True,
                 )
             },
             "vector_index_distribution": {
-                k: v for k, v in sorted(
+                k: v
+                for k, v in sorted(
                     {
                         vector_idx: count / len(lowest_similarities)
                         for vector_idx, count in individual_vector_counter.items()
                     }.items(),
                     key=lambda item: item[1],
-                    reverse=True
+                    reverse=True,
                 )
-            }
+            },
         }
 
-        # 构造结果
         result = {
             "adapter_name": config.adapter_name,
             "lowest_avg_similarities": [
-                {"avg_similarity": avg, "layer_index": layer_idx, "linear_name": linear_name}
+                {
+                    "avg_similarity": avg,
+                    "layer_index": layer_idx,
+                    "linear_name": linear_name,
+                }
                 for avg, layer_idx, linear_name in lowest_avg_similarities
             ],
             "lowest_avg_statistics": {
                 "layer_distribution": avg_statistics["layer_distribution"],
-                "linear_name_distribution": avg_statistics["linear_name_distribution"]
+                "linear_name_distribution": avg_statistics["linear_name_distribution"],
             },
             "lowest_individual_similarities": [
-                {"similarity": sim, "layer_index": layer_idx, "linear_name": linear_name, "vector_index": vector_idx}
+                {
+                    "similarity": sim,
+                    "layer_index": layer_idx,
+                    "linear_name": linear_name,
+                    "vector_index": vector_idx,
+                }
                 for sim, layer_idx, linear_name, vector_idx in lowest_similarities
             ],
             "lowest_individual_statistics": {
                 "layer_distribution": individual_statistics["layer_distribution"],
-                "linear_name_distribution": individual_statistics["linear_name_distribution"],
-                "vector_index_distribution": individual_statistics["vector_index_distribution"]
+                "linear_name_distribution": individual_statistics[
+                    "linear_name_distribution"
+                ],
+                "vector_index_distribution": individual_statistics[
+                    "vector_index_distribution"
+                ],
             },
         }
 
         return result
-        
+
     def _mapping(
         self, keys_list: List[Dict[str, List[str]]]
     ) -> List[Dict[str, List[str]]]:

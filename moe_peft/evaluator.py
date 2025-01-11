@@ -393,7 +393,7 @@ def evaluate(
                 svd_result = processor.process()
             else:
                 svd_result = processor.process(all_result=True)
-            
+
             file = (
                 f"svd_result: {config.adapter_name}.json"
                 if not save_file
