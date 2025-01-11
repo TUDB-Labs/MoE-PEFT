@@ -51,6 +51,7 @@ class SVDProcessor:
         true_keys = [key for key, value in target_modules.items() if value]
         return [{name: true_keys}]
 
+
     def _analyze_svd_data(self, data: List[List[Dict[str, List[float]]]], config) -> Dict:
         avg_similarities = []
         for layer_idx, layer in enumerate(data):
@@ -70,38 +71,68 @@ class SVDProcessor:
 
         lowest_similarities = heapq.nsmallest(15, all_similarities, key=lambda x: x[0])
 
-        # 统计 lowest_avg_similarities
+        # 统计 lowest_avg_similarities 的分布并排序
         avg_layer_counter = Counter([entry[1] for entry in lowest_avg_similarities])
         avg_linear_counter = Counter([entry[2] for entry in lowest_avg_similarities])
 
         avg_statistics = {
             "layer_distribution": {
-                layer_idx: count / len(lowest_avg_similarities)
-                for layer_idx, count in avg_layer_counter.items()
+                k: v for k, v in sorted(
+                    {
+                        layer_idx: count / len(lowest_avg_similarities)
+                        for layer_idx, count in avg_layer_counter.items()
+                    }.items(),
+                    key=lambda item: item[1],
+                    reverse=True
+                )
             },
             "linear_name_distribution": {
-                linear_name: count / len(lowest_avg_similarities)
-                for linear_name, count in avg_linear_counter.items()
+                k: v for k, v in sorted(
+                    {
+                        linear_name: count / len(lowest_avg_similarities)
+                        for linear_name, count in avg_linear_counter.items()
+                    }.items(),
+                    key=lambda item: item[1],
+                    reverse=True
+                )
             }
         }
 
-        # 统计 lowest_individual_similarities
+        # 统计 lowest_individual_similarities 的分布并排序
         individual_layer_counter = Counter([entry[1] for entry in lowest_similarities])
         individual_linear_counter = Counter([entry[2] for entry in lowest_similarities])
         individual_vector_counter = Counter([entry[3] for entry in lowest_similarities])
 
         individual_statistics = {
             "layer_distribution": {
-                layer_idx: count / len(lowest_similarities)
-                for layer_idx, count in individual_layer_counter.items()
+                k: v for k, v in sorted(
+                    {
+                        layer_idx: count / len(lowest_similarities)
+                        for layer_idx, count in individual_layer_counter.items()
+                    }.items(),
+                    key=lambda item: item[1],
+                    reverse=True
+                )
             },
             "linear_name_distribution": {
-                linear_name: count / len(lowest_similarities)
-                for linear_name, count in individual_linear_counter.items()
+                k: v for k, v in sorted(
+                    {
+                        linear_name: count / len(lowest_similarities)
+                        for linear_name, count in individual_linear_counter.items()
+                    }.items(),
+                    key=lambda item: item[1],
+                    reverse=True
+                )
             },
             "vector_index_distribution": {
-                vector_idx: count / len(lowest_similarities)
-                for vector_idx, count in individual_vector_counter.items()
+                k: v for k, v in sorted(
+                    {
+                        vector_idx: count / len(lowest_similarities)
+                        for vector_idx, count in individual_vector_counter.items()
+                    }.items(),
+                    key=lambda item: item[1],
+                    reverse=True
+                )
             }
         }
 
@@ -112,12 +143,19 @@ class SVDProcessor:
                 {"avg_similarity": avg, "layer_index": layer_idx, "linear_name": linear_name}
                 for avg, layer_idx, linear_name in lowest_avg_similarities
             ],
-            "lowest_avg_statistics": avg_statistics,
+            "lowest_avg_statistics": {
+                "layer_distribution": avg_statistics["layer_distribution"],
+                "linear_name_distribution": avg_statistics["linear_name_distribution"]
+            },
             "lowest_individual_similarities": [
                 {"similarity": sim, "layer_index": layer_idx, "linear_name": linear_name, "vector_index": vector_idx}
                 for sim, layer_idx, linear_name, vector_idx in lowest_similarities
             ],
-            "lowest_individual_statistics": individual_statistics,
+            "lowest_individual_statistics": {
+                "layer_distribution": individual_statistics["layer_distribution"],
+                "linear_name_distribution": individual_statistics["linear_name_distribution"],
+                "vector_index_distribution": individual_statistics["vector_index_distribution"]
+            },
         }
 
         return result
