@@ -6,6 +6,47 @@ import torch
 from .abstracts import LLMDecoder, LLMModelInput
 
 
+@torch.jit.script
+def tsallis_entropy(
+    p: torch.Tensor, q: float, normalize: bool = True, eps: float = 1e-5
+) -> torch.Tensor:
+    N = p.size(dim=-1)
+    p = p + eps
+    if q == 1.0:
+        entropy = -torch.sum(p * torch.log(p), dim=-1)
+        max_entropy = torch.log(torch.tensor(N, dtype=torch.float32))
+    else:
+        entropy = (1 - torch.sum(p**q, dim=-1)) / (q - 1)
+        max_entropy = torch.tensor((1 - N ** (1 - q)) / (q - 1), dtype=torch.float32)
+
+    if normalize:
+        return entropy / max_entropy
+    else:
+        return entropy
+
+
+def shannon_entropy(
+    p: torch.Tensor, normalize: bool = True, eps: float = 1e-5
+) -> torch.Tensor:
+    return tsallis_entropy(p, 1.0, normalize, eps)
+
+
+@torch.jit.script
+def renyi_entropy(p: torch.Tensor, a: float, normalize: bool = True, eps: float = 1e-5):
+    N = p.size(dim=-1)
+    p = p + eps
+    if a == 1.0:
+        entropy = -torch.sum(p * torch.log(p), dim=-1)
+    else:
+        entropy = 1 / (1 - a) * torch.log(torch.sum(p**a, dim=-1))
+
+    max_entropy = torch.log(torch.tensor(N, dtype=torch.float32))
+    if normalize:
+        return entropy / max_entropy
+    else:
+        return entropy
+
+
 def slice_tensor(
     data: torch.Tensor,
     slice: torch.Tensor,
@@ -48,6 +89,10 @@ def collect_plugin_router_logtis(
                 if router_logits[idx] is None:
                     router_logits[idx] = []
                 router_logits[idx].append(proj.moes_[adapter_name].router_logits_)
+
+    for proj in all_proj.values():
+        for adapter_name in proj.moes_.keys():
+            if hasattr(proj.moes_[adapter_name], "router_logits_"):
                 proj.moes_[adapter_name].router_logits_ = None
 
     for idx, logits in enumerate(router_logits):
