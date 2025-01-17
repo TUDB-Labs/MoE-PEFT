@@ -224,12 +224,12 @@ class MixtralSparseMoe(LLMMoeBlock):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.view(-1, hidden_dim).to(self.dtype_)
         # router_logits: (batch * sequence_length, n_experts)
-        router_logits = self.gate_(hidden_states)  # 在此处计算各专家的分数
+        router_logits = self.gate_(hidden_states)
 
-        routing_weights = F.softmax(router_logits, dim=1, dtype=self.dtype_)
+        routing_weights_before = F.softmax(router_logits, dim=1, dtype=self.dtype_)
 
         routing_weights, selected_experts = torch.topk(
-            routing_weights, self.topk_, dim=-1
+            routing_weights_before, self.topk_, dim=-1
         )
 
         self._profiling(batch_size, sequence_length, selected_experts)

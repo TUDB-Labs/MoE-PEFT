@@ -189,7 +189,7 @@ def init_lora_layer_weight(  # 将LoRA weight attach到不同的线性层上
         moe_layer_name_list = list(all_state_dict.keys())
         moe_init_strategy = "plugin"
     else:
-        model_prefix_name = "base_model.model.model"  # lora_weight格式
+        model_prefix_name = "base_model.model.model"  # lora_weight
         moe_layer_name_list = []
 
     assert len(moe_layer_name_list) == 0 or moe_init_strategy in ["plugin", "fused_mlp"]
@@ -206,9 +206,9 @@ def init_lora_layer_weight(  # 将LoRA weight attach到不同的线性层上
                     f"{model_prefix_name}.layers.{transformer_layer.layer_id_}.mlp.moe_gate.weight"
                 ]
             ),
+            profiling_flag=profiling_flag,
         )
 
-    # 该循环遍历所有使用lora微调的线性层，将lora weight attach到对应的线性层上
     for proj_name, lora_linear in all_state_dict.items():
         lora_linear: Linear
         if proj_name not in target_modules or not target_modules[proj_name]:
@@ -436,7 +436,7 @@ class LLMModel(torch.nn.Module):
 
         for decoder_layer in self.model_.decoder_stack():
             hidden_states, *router_logits = gradient_checkpoint(
-                decoder_layer.forward,  # 进入decoder_layer
+                decoder_layer.forward,  # decoder_layer
                 hidden_states,
                 input_args,
                 rotary_emb,
@@ -478,7 +478,7 @@ class LLMModel(torch.nn.Module):
         )
 
         hidden_states, all_router_logits = (
-            self._call_decoder_stack(  # 正式call decoder stack
+            self._call_decoder_stack(  # call decoder stack
                 hidden_states,
                 input_args,
                 rotary_emb,

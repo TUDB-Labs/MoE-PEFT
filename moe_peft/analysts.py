@@ -27,6 +27,7 @@ class SVDProcessor:
         # Possible linear types
         self._attn_linears = ["wq_", "wk_", "wv_", "wo_"]
         self._mlp_linears = ["w1_", "w2_", "w3_"]
+        self._single_expert_mood = True
 
     def process(
         self, all_result: Optional[bool] = False
@@ -35,14 +36,19 @@ class SVDProcessor:
 
         # Return the total svd analysis results
         if self.config.moe_flag and all_result:
-            return self._moe_weight_traverse(target_linears_list)
+            return self._moe_weight_traverse(
+                target_linears_list, self._single_expert_mood
+            )
         elif all_result:
             return self._lora_weight_traverse(target_linears_list)
 
         # Return svd analysis features
         elif self.config.moe_flag and not all_result:
             return self._analyze_svd_data(
-                self._moe_weight_traverse(target_linears_list), self.config
+                self._moe_weight_traverse(
+                    target_linears_list, self._single_expert_mood
+                ),
+                self.config,
             )
         else:
             return self._analyze_svd_data(
@@ -209,7 +215,7 @@ class SVDProcessor:
         self,
         p_weight: torch.Tensor,
         f_weight: torch.Tensor,
-        n: int = 9,
+        n: int = 100,
         device: str = "cuda:0",
     ) -> List[float]:
         p_weight = p_weight.to(torch.float32).to(device)
@@ -239,8 +245,9 @@ class SVDProcessor:
         adapter_name: str,
         loras_dict: Dict[str, torch.nn.Module],
         moe_profile: torch.Tensor = None,
+        single_expert_flag: bool = False,
     ) -> Dict[str, List[float]]:
-        if moe_profile is not None:
+        if moe_profile is not None and not single_expert_flag:
             # MoE scenario
             tuned_expert_value_lists = []
 
@@ -256,9 +263,30 @@ class SVDProcessor:
             )
             linear_key = linear.rstrip("_")
             logging.info(
-                f"Layer [{layer_idx}], linear [{linear_key}]: performing MoE SVD analysis..."
+                f"Layer [{layer_idx}], Linear [{linear_key}]: performing MoE SVD analysis..."
             )
             return {linear_key: self._perform_svd_analysis(p_weight, tuned_weights)}
+
+        elif moe_profile is not None and single_expert_flag:
+            stage_result = {}
+            linear_key = linear.rstrip("_")
+            stage_result[linear_key] = []
+            for expert_idx, expert_adapter in enumerate(loras_dict.values()):
+                p_weight = expert_adapter.base_layer_.weight
+                lora_a_weight = expert_adapter.lora_a_.weight
+                lora_b_weight = expert_adapter.lora_b_.weight
+                t_weight = lora_b_weight @ lora_a_weight + p_weight
+
+                logging.info(
+                    f"Layer [{layer_idx}], Linear [{linear_key}], Expert[{expert_idx}]: "
+                    "performing single expert MoE SVD analysis..."
+                )
+
+                stage_result[linear_key].append(
+                    self._perform_svd_analysis(p_weight, t_weight)
+                )
+
+            return stage_result
 
         else:
             # Normal LoRA scenario
@@ -271,7 +299,7 @@ class SVDProcessor:
 
                 linear_key = linear.rstrip("_")
                 logging.info(
-                    f"Layer [{layer_idx}], linear [{linear_key}]: performing SVD analysis..."
+                    f"Layer [{layer_idx}], Linear [{linear_key}]: performing LoRA SVD analysis..."
                 )
                 return {linear_key: self._perform_svd_analysis(p_weight, t_weight)}
 
@@ -320,7 +348,7 @@ class SVDProcessor:
         return final_result
 
     def _moe_weight_traverse(
-        self, target_linears_list: List[Dict[str, List[str]]]
+        self, target_linears_list: List[Dict[str, List[str]]], sigle_expert_mood: str
     ) -> List[List[Dict[str, List[float]]]]:
         final_result = []
 
@@ -377,6 +405,7 @@ class SVDProcessor:
                                     adapter_name,
                                     loras_dict,
                                     moe_profile=profile_matrix,
+                                    single_expert_flag=self._single_expert_mood,
                                 )
                                 if analysis_result:
                                     layer_result.append(analysis_result)
