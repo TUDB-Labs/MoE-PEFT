@@ -70,9 +70,7 @@ conda activate moe_peft
 # Install requirements
 pip3 install -r requirements.txt --upgrade
 # Install extra requirements
-pip3 install ninja
-pip3 install bitsandbytes==0.43.1
-pip3 install flash-attn==2.5.8 --no-build-isolation
+bash misc/install-extra-linux.sh
 ```
 
 ## Verification
