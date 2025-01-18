@@ -49,7 +49,7 @@ class SVDProcessor:
                     target_linears_list, self._single_expert_mood
                 ),
                 self.config,
-                self.config.single_expert_mood,
+                self._single_expert_mood,
             )
         else:
             return self._analyze_svd_data(
