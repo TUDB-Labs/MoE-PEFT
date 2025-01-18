@@ -285,7 +285,9 @@ def _compute_result(model, configs, save_file):
     for config in configs:
         result = {
             "adapter_name": config.adapter_name,
-            "task_name": config.task_name,
+            "task_name": (
+                config.task_name if config.data_path is None else config.data_path
+            ),
             "date_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
             "metrics": {},
         }
