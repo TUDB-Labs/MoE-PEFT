@@ -49,11 +49,11 @@ class SVDProcessor:
                     target_linears_list, self._single_expert_mood
                 ),
                 self.config,
-                self.config.single_expert_mood
+                self.config.single_expert_mood,
             )
         else:
             return self._analyze_svd_data(
-                self._lora_weight_traverse(target_linears_list),self.config
+                self._lora_weight_traverse(target_linears_list), self.config
             )
 
     def _keys_extraction(self, config) -> List[Dict[str, List[str]]]:
@@ -65,7 +65,7 @@ class SVDProcessor:
     def _analyze_svd_data(
         self, data: List[List[Dict[str, List[float]]]], config, single_expert_flag
     ) -> Dict:
-        
+
         if single_expert_flag:
             logging.info("Single expert mood is enabled.")
             return self._analyze_svd_data_single_expert(data, config)
@@ -221,7 +221,9 @@ class SVDProcessor:
                             # 计算该 expert 的平均相似度
                             if not expert_values:  # 防止空数据
                                 continue
-                            avg_similarity = sum(abs(sim) for sim in expert_values) / len(expert_values)
+                            avg_similarity = sum(
+                                abs(sim) for sim in expert_values
+                            ) / len(expert_values)
                             # 将 expert_index 同步存储进去
                             avg_similarities.append(
                                 (avg_similarity, layer_idx, linear_name, expert_idx)
@@ -230,7 +232,9 @@ class SVDProcessor:
                         # 保持与原逻辑一致，视为普通线性层 (List[float]) 计算平均值
                         if not raw_values:
                             continue
-                        avg_similarity = sum(abs(sim) for sim in raw_values) / len(raw_values)
+                        avg_similarity = sum(abs(sim) for sim in raw_values) / len(
+                            raw_values
+                        )
                         # 不属于 MoE 层时，expert_idx 可以用 None 或者直接省略
                         avg_similarities.append(
                             (avg_similarity, layer_idx, linear_name, None)
@@ -251,19 +255,29 @@ class SVDProcessor:
                         for expert_idx, expert_values in enumerate(raw_values):
                             for vector_idx, similarity in enumerate(expert_values):
                                 all_similarities.append(
-                                    (abs(similarity), layer_idx, linear_name, expert_idx, vector_idx)
+                                    (
+                                        abs(similarity),
+                                        layer_idx,
+                                        linear_name,
+                                        expert_idx,
+                                        vector_idx,
+                                    )
                                 )
                     else:
                         # 普通层
                         for vector_idx, similarity in enumerate(raw_values):
                             all_similarities.append(
-                                (abs(similarity), layer_idx, linear_name, None, vector_idx)
+                                (
+                                    abs(similarity),
+                                    layer_idx,
+                                    linear_name,
+                                    None,
+                                    vector_idx,
+                                )
                             )
 
         # 只取前30个最低个体相似度
-        lowest_similarities = heapq.nsmallest(
-            30, all_similarities, key=lambda x: x[0]
-        )
+        lowest_similarities = heapq.nsmallest(30, all_similarities, key=lambda x: x[0])
 
         # ----------------- 3) 统计分布信息（layer 与 linear_name 与 vector_index） -----------------
         #   由于“expert_index” 统计是否需要可按需添加，这里先保持与原先统计一致
@@ -361,12 +375,22 @@ class SVDProcessor:
                     "expert_index": expert_idx,  # new
                     "vector_index": vector_idx,
                 }
-                for (sim, layer_idx, linear_name, expert_idx, vector_idx) in lowest_similarities
+                for (
+                    sim,
+                    layer_idx,
+                    linear_name,
+                    expert_idx,
+                    vector_idx,
+                ) in lowest_similarities
             ],
             "lowest_individual_statistics": {
                 "layer_distribution": individual_statistics["layer_distribution"],
-                "linear_name_distribution": individual_statistics["linear_name_distribution"],
-                "vector_index_distribution": individual_statistics["vector_index_distribution"],
+                "linear_name_distribution": individual_statistics[
+                    "linear_name_distribution"
+                ],
+                "vector_index_distribution": individual_statistics[
+                    "vector_index_distribution"
+                ],
             },
         }
 
@@ -462,9 +486,7 @@ class SVDProcessor:
                     "performing single expert MoE SVD analysis..."
                 )
 
-                stage_result[linear_key].append(
-                    self._perform_svd(p_weight, t_weight)
-                )
+                stage_result[linear_key].append(self._perform_svd(p_weight, t_weight))
 
             return stage_result
 
