@@ -249,7 +249,7 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
             if router_statistic_ is not None and any(router_statistic_):
                 for r_idx, val in enumerate(router_statistic_):
                     logging.info(
-                        f"{config.adapter_name}: expert {r_idx}, load = {val / 224}"
+                        f"{config.adapter_name}: expert {r_idx}, load = {val / 32}"
                     )
 
         # The following is the original logits processing and metric computation logic
