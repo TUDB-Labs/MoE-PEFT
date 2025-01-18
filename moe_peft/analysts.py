@@ -65,194 +65,257 @@ class SVDProcessor:
     def _analyze_svd_data(
         self, data: List[List[Dict[str, List[float]]]], config, single_expert_flag
     ) -> Dict:
-
+        """
+        当 single_expert_flag = False 时执行原有逻辑，
+        当 single_expert_flag = True 时转到 _analyze_svd_data_single_expert。
+        """
         if single_expert_flag:
-            logging.info("Single expert mood is enabled.")
+            logging.info("Single expert mode is enabled.")
             return self._analyze_svd_data_single_expert(data, config)
         else:
-            logging.info("Mixture expert mood is enabled.")
-
-        avg_similarities = []
-        for layer_idx, layer in enumerate(data):
-            for linear_data in layer:
-                for linear_name, similarities in linear_data.items():
-                    avg_similarity = sum(abs(sim) for sim in similarities) / len(
-                        similarities
-                    )
-                    avg_similarities.append((avg_similarity, layer_idx, linear_name))
-
-        lowest_avg_similarities = heapq.nsmallest(
-            15, avg_similarities, key=lambda x: x[0]
-        )
-
-        all_similarities = []
-        for layer_idx, layer in enumerate(data):
-            for linear_data in layer:
-                for linear_name, similarities in linear_data.items():
-                    for vector_idx, similarity in enumerate(similarities):
-                        all_similarities.append(
-                            (abs(similarity), layer_idx, linear_name, vector_idx)
+            logging.info("Mixture expert mode is enabled.")
+            avg_similarities = []
+            for layer_idx, layer in enumerate(data):
+                for linear_data in layer:
+                    for linear_name, similarities in linear_data.items():
+                        avg_similarity = sum(abs(sim) for sim in similarities) / len(
+                            similarities
+                        )
+                        avg_similarities.append(
+                            (avg_similarity, layer_idx, linear_name)
                         )
 
-        lowest_similarities = heapq.nsmallest(30, all_similarities, key=lambda x: x[0])
+            lowest_avg_similarities = heapq.nsmallest(
+                15, avg_similarities, key=lambda x: x[0]
+            )
 
-        avg_layer_counter = Counter([entry[1] for entry in lowest_avg_similarities])
-        avg_linear_counter = Counter([entry[2] for entry in lowest_avg_similarities])
+            all_similarities = []
+            intruder_dim_count = 0
+            intruder_layer_counter = Counter()
+            intruder_linear_counter = Counter()
+            intruder_vector_counter = Counter()
 
-        avg_statistics = {
-            "layer_distribution": {
-                k: v
-                for k, v in sorted(
-                    {
-                        layer_idx: count / len(lowest_avg_similarities)
-                        for layer_idx, count in avg_layer_counter.items()
-                    }.items(),
-                    key=lambda item: item[1],
-                    reverse=True,
-                )
-            },
-            "linear_name_distribution": {
-                k: v
-                for k, v in sorted(
-                    {
-                        linear_name: count / len(lowest_avg_similarities)
-                        for linear_name, count in avg_linear_counter.items()
-                    }.items(),
-                    key=lambda item: item[1],
-                    reverse=True,
-                )
-            },
-        }
+            for layer_idx, layer in enumerate(data):
+                for linear_data in layer:
+                    for linear_name, similarities in linear_data.items():
+                        for vector_idx, similarity in enumerate(similarities):
+                            all_similarities.append(
+                                (abs(similarity), layer_idx, linear_name, vector_idx)
+                            )
+                            if (
+                                abs(similarity) < 0.85
+                            ):  # ***************************** intruder threshold *****************************
+                                intruder_dim_count += 1
+                                intruder_layer_counter[layer_idx] += 1
+                                intruder_linear_counter[linear_name] += 1
+                                intruder_vector_counter[vector_idx] += 1
 
-        individual_layer_counter = Counter([entry[1] for entry in lowest_similarities])
-        individual_linear_counter = Counter([entry[2] for entry in lowest_similarities])
-        individual_vector_counter = Counter([entry[3] for entry in lowest_similarities])
+            lowest_similarities = heapq.nsmallest(
+                30, all_similarities, key=lambda x: x[0]
+            )
 
-        individual_statistics = {
-            "layer_distribution": {
-                k: v
-                for k, v in sorted(
-                    {
-                        layer_idx: count / len(lowest_similarities)
-                        for layer_idx, count in individual_layer_counter.items()
-                    }.items(),
-                    key=lambda item: item[1],
-                    reverse=True,
-                )
-            },
-            "linear_name_distribution": {
-                k: v
-                for k, v in sorted(
-                    {
-                        linear_name: count / len(lowest_similarities)
-                        for linear_name, count in individual_linear_counter.items()
-                    }.items(),
-                    key=lambda item: item[1],
-                    reverse=True,
-                )
-            },
-            "vector_index_distribution": {
-                k: v
-                for k, v in sorted(
-                    {
-                        vector_idx: count / len(lowest_similarities)
-                        for vector_idx, count in individual_vector_counter.items()
-                    }.items(),
-                    key=lambda item: item[1],
-                    reverse=True,
-                )
-            },
-        }
+            avg_layer_counter = Counter([entry[1] for entry in lowest_avg_similarities])
+            avg_linear_counter = Counter(
+                [entry[2] for entry in lowest_avg_similarities]
+            )
 
-        result = {
-            "adapter_name": config.adapter_name,
-            "lowest_avg_similarities": [
-                {
-                    "avg_similarity": avg,
-                    "layer_index": layer_idx,
-                    "linear_name": linear_name,
-                }
-                for avg, layer_idx, linear_name in lowest_avg_similarities
-            ],
-            "lowest_avg_statistics": {
-                "layer_distribution": avg_statistics["layer_distribution"],
-                "linear_name_distribution": avg_statistics["linear_name_distribution"],
-            },
-            "lowest_individual_similarities": [
-                {
-                    "similarity": sim,
-                    "layer_index": layer_idx,
-                    "linear_name": linear_name,
-                    "vector_index": vector_idx,
-                }
-                for sim, layer_idx, linear_name, vector_idx in lowest_similarities
-            ],
-            "lowest_individual_statistics": {
-                "layer_distribution": individual_statistics["layer_distribution"],
-                "linear_name_distribution": individual_statistics[
-                    "linear_name_distribution"
+            avg_statistics = {
+                "layer_distribution": {
+                    k: v
+                    for k, v in sorted(
+                        {
+                            layer_idx: count / len(lowest_avg_similarities)
+                            for layer_idx, count in avg_layer_counter.items()
+                        }.items(),
+                        key=lambda item: item[1],
+                        reverse=True,
+                    )
+                },
+                "linear_name_distribution": {
+                    k: v
+                    for k, v in sorted(
+                        {
+                            linear_name: count / len(lowest_avg_similarities)
+                            for linear_name, count in avg_linear_counter.items()
+                        }.items(),
+                        key=lambda item: item[1],
+                        reverse=True,
+                    )
+                },
+            }
+
+            individual_layer_counter = Counter(
+                [entry[1] for entry in lowest_similarities]
+            )
+            individual_linear_counter = Counter(
+                [entry[2] for entry in lowest_similarities]
+            )
+            individual_vector_counter = Counter(
+                [entry[3] for entry in lowest_similarities]
+            )
+
+            individual_statistics = {
+                "layer_distribution": {
+                    k: v
+                    for k, v in sorted(
+                        {
+                            layer_idx: count / len(lowest_similarities)
+                            for layer_idx, count in individual_layer_counter.items()
+                        }.items(),
+                        key=lambda item: item[1],
+                        reverse=True,
+                    )
+                },
+                "linear_name_distribution": {
+                    k: v
+                    for k, v in sorted(
+                        {
+                            linear_name: count / len(lowest_similarities)
+                            for linear_name, count in individual_linear_counter.items()
+                        }.items(),
+                        key=lambda item: item[1],
+                        reverse=True,
+                    )
+                },
+                "vector_index_distribution": {
+                    k: v
+                    for k, v in sorted(
+                        {
+                            vector_idx: count / len(lowest_similarities)
+                            for vector_idx, count in individual_vector_counter.items()
+                        }.items(),
+                        key=lambda item: item[1],
+                        reverse=True,
+                    )
+                },
+                "intruder_dim_num": {
+                    "total_intruder_count": intruder_dim_count,
+                    "layer_distribution": {
+                        k: v / intruder_dim_count
+                        for k, v in intruder_layer_counter.items()
+                    },
+                    "linear_name_distribution": {
+                        k: v / intruder_dim_count
+                        for k, v in intruder_linear_counter.items()
+                    },
+                    "vector_index_distribution": {
+                        k: v / intruder_dim_count
+                        for k, v in intruder_vector_counter.items()
+                    },
+                },
+            }
+
+            result = {
+                "adapter_name": config.adapter_name,
+                "lowest_avg_similarities": [
+                    {
+                        "avg_similarity": avg,
+                        "layer_index": layer_idx,
+                        "linear_name": linear_name,
+                    }
+                    for avg, layer_idx, linear_name in lowest_avg_similarities
                 ],
-                "vector_index_distribution": individual_statistics[
-                    "vector_index_distribution"
+                "lowest_avg_statistics": {
+                    "layer_distribution": avg_statistics["layer_distribution"],
+                    "linear_name_distribution": avg_statistics[
+                        "linear_name_distribution"
+                    ],
+                },
+                "lowest_individual_similarities": [
+                    {
+                        "similarity": sim,
+                        "layer_index": layer_idx,
+                        "linear_name": linear_name,
+                        "vector_index": vector_idx,
+                    }
+                    for sim, layer_idx, linear_name, vector_idx in lowest_similarities
                 ],
-            },
-        }
+                "lowest_individual_statistics": {
+                    "layer_distribution": individual_statistics["layer_distribution"],
+                    "linear_name_distribution": individual_statistics[
+                        "linear_name_distribution"
+                    ],
+                    "vector_index_distribution": individual_statistics[
+                        "vector_index_distribution"
+                    ],
+                    "intruder_dim_num": individual_statistics["intruder_dim_num"],
+                },
+            }
 
-        return result
+            return result
 
     def _analyze_svd_data_single_expert(
         self, data: List[List[Dict[str, List]]], config
     ) -> Dict:
         """
-        专门处理 single_expert_flag=True 时的数据格式，其中 w1,w2,w3 对应 MoE 层。
-        这些层下的 value 不再是单纯的一维列表，而是一个 [expert_0, expert_1, ...] 的列表，
+        专门处理 single_expert_flag=True 时的数据格式，其中 w1, w2, w3 对应 MoE 层。
+        这些层下的值不再是单纯的一维列表，而是一个 [expert_0, expert_1, ...] 的列表，
         每个 expert_i 又是一个浮点数列表。我们需要计算时额外带上 expert_index。
         """
         moe_linear_names = {"w1", "w2", "w3"}
 
         # ----------------- 1) 计算“平均相似度” -----------------
         avg_similarities = []
+        intruder_dim_count = 0
+        intruder_layer_counter = Counter()
+        intruder_linear_counter = Counter()
+        intruder_vector_counter = Counter()
+
         for layer_idx, layer in enumerate(data):
             for linear_data in layer:
-                for linear_name, raw_values in linear_data.items():
-                    # 如果是 w1,w2,w3 (MoE层)， raw_values 应该是 List[List[float]]，长度=8（8个专家）
-                    if linear_name in moe_linear_names and isinstance(raw_values, list):
-                        for expert_idx, expert_values in enumerate(raw_values):
-                            # 计算该 expert 的平均相似度
-                            if not expert_values:  # 防止空数据
-                                continue
+                for linear_name, expert_list in linear_data.items():
+                    if linear_name in moe_linear_names:
+                        for expert_idx, expert_values in enumerate(expert_list):
                             avg_similarity = sum(
                                 abs(sim) for sim in expert_values
                             ) / len(expert_values)
-                            # 将 expert_index 同步存储进去
                             avg_similarities.append(
                                 (avg_similarity, layer_idx, linear_name, expert_idx)
                             )
-                    else:
-                        # 保持与原逻辑一致，视为普通线性层 (List[float]) 计算平均值
-                        if not raw_values:
-                            continue
-                        avg_similarity = sum(abs(sim) for sim in raw_values) / len(
-                            raw_values
-                        )
-                        # 不属于 MoE 层时，expert_idx 可以用 None 或者直接省略
-                        avg_similarities.append(
-                            (avg_similarity, layer_idx, linear_name, None)
-                        )
 
-        # 只取前15个最低平均相似度
+                            for vector_idx, similarity in enumerate(expert_values):
+                                if (
+                                    abs(similarity) < 0.85
+                                ):  # ***************************** intruder threshold *****************************
+                                    intruder_dim_count += 1
+                                    intruder_layer_counter[layer_idx] += 1
+                                    intruder_linear_counter[linear_name] += 1
+                                    intruder_vector_counter[vector_idx] += 1
+
+        # 获取最低平均相似度的 30 个
         lowest_avg_similarities = heapq.nsmallest(
-            15, avg_similarities, key=lambda x: x[0]
+            30, avg_similarities, key=lambda x: x[0]
         )
 
-        # ----------------- 2) 计算“所有个体相似度” -----------------
+        # 汇总各层、线性层、索引的分布
+        avg_layer_counter = Counter([entry[1] for entry in lowest_avg_similarities])
+        avg_linear_counter = Counter([entry[2] for entry in lowest_avg_similarities])
+        avg_expert_counter = Counter([entry[3] for entry in lowest_avg_similarities])
+
+        avg_statistics = {
+            "layer_distribution": {
+                k: v / len(lowest_avg_similarities)
+                for k, v in avg_layer_counter.items()
+            },
+            "linear_name_distribution": {
+                k: v / len(lowest_avg_similarities)
+                for k, v in avg_linear_counter.items()
+            },
+            "expert_index_distribution": {
+                k: v / len(lowest_avg_similarities)
+                for k, v in avg_expert_counter.items()
+            },
+        }
+
+        # ----------------- 2) 获取最低相似度的 30 个数据 -----------------
         all_similarities = []
+        lowest_similarities = []
+
         for layer_idx, layer in enumerate(data):
             for linear_data in layer:
-                for linear_name, raw_values in linear_data.items():
-                    if linear_name in moe_linear_names and isinstance(raw_values, list):
-                        # w1,w2,w3：有多个expert
-                        for expert_idx, expert_values in enumerate(raw_values):
+                for linear_name, expert_list in linear_data.items():
+                    if linear_name in moe_linear_names:
+                        for expert_idx, expert_values in enumerate(expert_list):
                             for vector_idx, similarity in enumerate(expert_values):
                                 all_similarities.append(
                                     (
@@ -263,94 +326,59 @@ class SVDProcessor:
                                         vector_idx,
                                     )
                                 )
-                    else:
-                        # 普通层
-                        for vector_idx, similarity in enumerate(raw_values):
-                            all_similarities.append(
-                                (
-                                    abs(similarity),
-                                    layer_idx,
-                                    linear_name,
-                                    None,
-                                    vector_idx,
-                                )
-                            )
+                                if abs(similarity) < 0.85:
+                                    lowest_similarities.append(
+                                        (
+                                            abs(similarity),
+                                            layer_idx,
+                                            linear_name,
+                                            expert_idx,
+                                            vector_idx,
+                                        )
+                                    )
 
-        # 只取前30个最低个体相似度
+        # 获取最低相似度的 30 个
         lowest_similarities = heapq.nsmallest(30, all_similarities, key=lambda x: x[0])
 
-        # ----------------- 3) 统计分布信息（layer 与 linear_name 与 vector_index） -----------------
-        #   由于“expert_index” 统计是否需要可按需添加，这里先保持与原先统计一致
-        avg_layer_counter = Counter([entry[1] for entry in lowest_avg_similarities])
-        avg_linear_counter = Counter([entry[2] for entry in lowest_avg_similarities])
-
-        avg_statistics = {
-            "layer_distribution": {
-                k: v
-                for k, v in sorted(
-                    {
-                        layer_idx: count / len(lowest_avg_similarities)
-                        for layer_idx, count in avg_layer_counter.items()
-                    }.items(),
-                    key=lambda item: item[1],
-                    reverse=True,
-                )
-            },
-            "linear_name_distribution": {
-                k: v
-                for k, v in sorted(
-                    {
-                        linear_name: count / len(lowest_avg_similarities)
-                        for linear_name, count in avg_linear_counter.items()
-                    }.items(),
-                    key=lambda item: item[1],
-                    reverse=True,
-                )
-            },
-        }
-
+        # 汇总统计
         individual_layer_counter = Counter([entry[1] for entry in lowest_similarities])
         individual_linear_counter = Counter([entry[2] for entry in lowest_similarities])
-        # 这里原先统计的是 vector_index 分布，如果你想加上 expert_index，可以新增一个分布
+        individual_expert_counter = Counter([entry[3] for entry in lowest_similarities])
         individual_vector_counter = Counter([entry[4] for entry in lowest_similarities])
 
         individual_statistics = {
             "layer_distribution": {
-                k: v
-                for k, v in sorted(
-                    {
-                        layer_idx: count / len(lowest_similarities)
-                        for layer_idx, count in individual_layer_counter.items()
-                    }.items(),
-                    key=lambda item: item[1],
-                    reverse=True,
-                )
+                k: v / len(lowest_similarities)
+                for k, v in individual_layer_counter.items()
             },
             "linear_name_distribution": {
-                k: v
-                for k, v in sorted(
-                    {
-                        linear_name: count / len(lowest_similarities)
-                        for linear_name, count in individual_linear_counter.items()
-                    }.items(),
-                    key=lambda item: item[1],
-                    reverse=True,
-                )
+                k: v / len(lowest_similarities)
+                for k, v in individual_linear_counter.items()
+            },
+            "expert_index_distribution": {
+                k: v / len(lowest_similarities)
+                for k, v in individual_expert_counter.items()
             },
             "vector_index_distribution": {
-                k: v
-                for k, v in sorted(
-                    {
-                        vector_idx: count / len(lowest_similarities)
-                        for vector_idx, count in individual_vector_counter.items()
-                    }.items(),
-                    key=lambda item: item[1],
-                    reverse=True,
-                )
+                k: v / len(lowest_similarities)
+                for k, v in individual_vector_counter.items()
+            },
+            "intruder_dim_num": {
+                "total_intruder_count": intruder_dim_count,
+                "layer_distribution": {
+                    k: v / intruder_dim_count for k, v in intruder_layer_counter.items()
+                },
+                "linear_name_distribution": {
+                    k: v / intruder_dim_count
+                    for k, v in intruder_linear_counter.items()
+                },
+                "expert_index_distribution": {
+                    k: v / intruder_dim_count
+                    for k, v in intruder_vector_counter.items()
+                },
             },
         }
 
-        # ----------------- 4) 组装最终结果字典，带上 expert_index -----------------
         result = {
             "adapter_name": config.adapter_name,
             "lowest_avg_similarities": [
@@ -358,40 +386,22 @@ class SVDProcessor:
                     "avg_similarity": avg,
                     "layer_index": layer_idx,
                     "linear_name": linear_name,
-                    # 只有当属于 w1/w2/w3 时才会有实际的 expert_idx，否则是 None
                     "expert_index": expert_idx,
                 }
-                for (avg, layer_idx, linear_name, expert_idx) in lowest_avg_similarities
+                for avg, layer_idx, linear_name, expert_idx in lowest_avg_similarities
             ],
-            "lowest_avg_statistics": {
-                "layer_distribution": avg_statistics["layer_distribution"],
-                "linear_name_distribution": avg_statistics["linear_name_distribution"],
-            },
+            "lowest_avg_statistics": avg_statistics,
             "lowest_individual_similarities": [
                 {
                     "similarity": sim,
                     "layer_index": layer_idx,
                     "linear_name": linear_name,
-                    "expert_index": expert_idx,  # new
+                    "expert_index": expert_idx,
                     "vector_index": vector_idx,
                 }
-                for (
-                    sim,
-                    layer_idx,
-                    linear_name,
-                    expert_idx,
-                    vector_idx,
-                ) in lowest_similarities
+                for sim, layer_idx, linear_name, expert_idx, vector_idx in lowest_similarities
             ],
-            "lowest_individual_statistics": {
-                "layer_distribution": individual_statistics["layer_distribution"],
-                "linear_name_distribution": individual_statistics[
-                    "linear_name_distribution"
-                ],
-                "vector_index_distribution": individual_statistics[
-                    "vector_index_distribution"
-                ],
-            },
+            "lowest_individual_statistics": individual_statistics,
         }
 
         return result
