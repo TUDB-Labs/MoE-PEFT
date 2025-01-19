@@ -27,7 +27,7 @@ class SVDProcessor:
         # Possible linear types
         self._attn_linears = ["wq_", "wk_", "wv_", "wo_"]
         self._mlp_linears = ["w1_", "w2_", "w3_"]
-        self._single_expert_mood = True
+        self._single_expert_mood = False
 
     def process(
         self, all_result: Optional[bool] = False
@@ -53,7 +53,7 @@ class SVDProcessor:
             )
         else:
             return self._analyze_svd_data(
-                self._lora_weight_traverse(target_linears_list), self.config
+                self._lora_weight_traverse(target_linears_list), self.config, False
             )
 
     def _keys_extraction(self, config) -> List[Dict[str, List[str]]]:
@@ -63,6 +63,30 @@ class SVDProcessor:
         return [{name: true_keys}]
 
     def _analyze_svd_data(
+        self, data: List[List[Dict[str, List[float]]]], config, flag
+    ) -> Dict:
+        low_similarity_count = 0
+        low_similarity_linear_counter = Counter()
+
+        for layer in data:
+            for linear_data in layer:
+                for linear_name, similarities in linear_data.items():
+                    for similarity in similarities:
+                        if abs(similarity) < 0.8:
+                            low_similarity_count += 1
+                            low_similarity_linear_counter[linear_name] += 1
+
+        low_similarity_linear_distribution = dict(low_similarity_linear_counter)
+
+        result = {
+            "adapter_name": config.adapter_name,
+            "low_similarity_count": low_similarity_count,
+            "low_similarity_linear_distribution": low_similarity_linear_distribution,
+        }
+
+        return result
+
+    def _analyze_svd_data_multi_expert(
         self, data: List[List[Dict[str, List[float]]]], config, single_expert_flag
     ) -> Dict:
         """
