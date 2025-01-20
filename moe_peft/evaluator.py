@@ -397,7 +397,7 @@ def evaluate(
                 svd_result = processor.process(all_result=True)
 
             file = (
-                f"svd_result_ {config.adapter_name}.json"
+                f"svd_result_{config.adapter_name}_30_rvt.json"
                 if not save_file
                 else save_file
             )

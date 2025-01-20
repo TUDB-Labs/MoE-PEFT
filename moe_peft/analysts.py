@@ -67,16 +67,26 @@ class SVDProcessor:
     ) -> Dict:
         low_similarity_count = 0
         low_similarity_linear_counter = Counter()
+        low_similarity_values = []
 
         for layer in data:
             for linear_data in layer:
                 for linear_name, similarities in linear_data.items():
                     for similarity in similarities:
-                        if abs(similarity) < 0.8:
+                        if abs(similarity) < 0.5:
                             low_similarity_count += 1
                             low_similarity_linear_counter[linear_name] += 1
+                            low_similarity_values.append((similarity, linear_name))
 
-        low_similarity_linear_distribution = dict(low_similarity_linear_counter)
+        low_similarity_values.sort(key=lambda x: abs(x[0]))
+
+        top_10_percent_count = max(1, int(0.1 * low_similarity_count))
+        top_10_percent_values = low_similarity_values[:top_10_percent_count]
+
+        top_10_percent_linear_counter = Counter(
+            [item[1] for item in top_10_percent_values]
+        )
+        low_similarity_linear_distribution = dict(top_10_percent_linear_counter)
 
         result = {
             "adapter_name": config.adapter_name,
@@ -306,12 +316,10 @@ class SVDProcessor:
                                     intruder_linear_counter[linear_name] += 1
                                     intruder_vector_counter[vector_idx] += 1
 
-        # 获取最低平均相似度的 30 个
         lowest_avg_similarities = heapq.nsmallest(
             30, avg_similarities, key=lambda x: x[0]
         )
 
-        # 汇总各层、线性层、索引的分布
         avg_layer_counter = Counter([entry[1] for entry in lowest_avg_similarities])
         avg_linear_counter = Counter([entry[2] for entry in lowest_avg_similarities])
         avg_expert_counter = Counter([entry[3] for entry in lowest_avg_similarities])
@@ -361,10 +369,8 @@ class SVDProcessor:
                                         )
                                     )
 
-        # 获取最低相似度的 30 个
         lowest_similarities = heapq.nsmallest(30, all_similarities, key=lambda x: x[0])
 
-        # 汇总统计
         individual_layer_counter = Counter([entry[1] for entry in lowest_similarities])
         individual_linear_counter = Counter([entry[2] for entry in lowest_similarities])
         individual_expert_counter = Counter([entry[3] for entry in lowest_similarities])
