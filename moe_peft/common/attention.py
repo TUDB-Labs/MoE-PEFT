@@ -155,8 +155,8 @@ def _upad_input(
 
 def prepare_fa2_from_position_ids(query, key, value, position_ids):
     query = query.view(-1, query.size(-2), query.size(-1))
-    key = key.view(-1, key.size(-2), key.size(-1))
-    value = value.view(-1, value.size(-2), value.size(-1))
+    key = key.contiguous().view(-1, key.size(-2), key.size(-1))
+    value = value.contiguous().view(-1, value.size(-2), value.size(-1))
     position_ids = position_ids.flatten()
     indices_q = torch.arange(
         position_ids.size(0), device=position_ids.device, dtype=torch.int32
@@ -183,6 +183,24 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids):
     )
 
 
+def fa_peft_integration_check(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    target_dtype: Optional[torch.dtype] = None,
+):
+    if target_dtype is None:
+        return query, key, value
+
+    input_dtype = value.dtype
+    if input_dtype == torch.float32:
+        query = query.to(target_dtype)
+        key = key.to(target_dtype)
+        value = value.to(target_dtype)
+
+    return query, key, value
+
+
 def flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
@@ -197,6 +215,12 @@ def flash_attention_forward(
     use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
     deterministic: Optional[bool] = None,
+    cu_seq_lens_q: Optional[torch.LongTensor] = None,
+    cu_seq_lens_k: Optional[torch.LongTensor] = None,
+    max_length_q: Optional[int] = None,
+    max_length_k: Optional[int] = None,
+    target_dtype: Optional[torch.dtype] = None,
+    **kwargs,
 ):
     if not use_top_left_mask:
         causal = is_causal
@@ -218,6 +242,11 @@ def flash_attention_forward(
 
     if softcap is not None:
         flash_kwargs["softcap"] = softcap
+
+    # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
+    query_states, key_states, value_states = fa_peft_integration_check(
+        query_states, key_states, value_states, target_dtype
+    )
 
     # Contains at least one padding token in the sequence
     if attention_mask is not None:
@@ -245,29 +274,46 @@ def flash_attention_forward(
         )
         attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
 
-    elif (
-        position_ids is not None
-        and not (torch.diff(position_ids, dim=-1) >= 0).all()
-        and query_length != 1
+    elif position_ids is not None and (
+        max_length_q is not None
+        or (query_length != 1 and not (torch.diff(position_ids, dim=-1) >= 0).all())
     ):
         batch_size = query_states.size(0)
-        query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = (
-            prepare_fa2_from_position_ids(
+
+        if cu_seq_lens_q is None or cu_seq_lens_k is None:
+            (
+                query_states,
+                key_states,
+                value_states,
+                indices_q,
+                cu_seq_lens,
+                max_seq_lens,
+            ) = prepare_fa2_from_position_ids(
                 query_states, key_states, value_states, position_ids
             )
-        )
 
-        cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-        max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+            cu_seq_lens_q, cu_seq_lens_k = cu_seq_lens
+            max_length_q, max_length_k = max_seq_lens
+
+        else:
+            query_states = query_states.reshape(
+                -1, query_states.size(-2), query_states.size(-1)
+            )
+            key_states = key_states.reshape(
+                -1, key_states.size(-2), key_states.size(-1)
+            )
+            value_states = value_states.reshape(
+                -1, value_states.size(-2), value_states.size(-1)
+            )
 
         attn_output = flash_attn_varlen_func(
             query_states,
             key_states,
             value_states,
-            cu_seqlens_q=cu_seqlens_q,
-            cu_seqlens_k=cu_seqlens_k,
-            max_seqlen_q=max_seqlen_in_batch_q,
-            max_seqlen_k=max_seqlen_in_batch_k,
+            cu_seqlens_q=cu_seq_lens_q,
+            cu_seqlens_k=cu_seq_lens_k,
+            max_seqlen_q=max_length_q,
+            max_seqlen_k=max_length_k,
             dropout_p=dropout,
             softmax_scale=softmax_scale,
             causal=causal,
