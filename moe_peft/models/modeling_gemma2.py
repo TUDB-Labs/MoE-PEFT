@@ -218,6 +218,7 @@ class Gemma2Attention(LLMAttention):
             )
 
         input_dtype = query_states.dtype
+        target_dtype = None
         if input_dtype == torch.float32:
             if executor.is_bf16_supported():
                 target_dtype = torch.bfloat16
@@ -230,6 +231,8 @@ class Gemma2Attention(LLMAttention):
             value_states,
             attention_mask,
             scaling=self.scaling_,
+            # eager attention arguments
+            model_config=self.config_,
             # flash attention arguments
             query_length=q_len,
             is_causal=self.is_causal_,
@@ -354,12 +357,7 @@ class Gemma2ForCausalLM(LLMForCausalLM):
         self.vocab_size_ = config.vocab_size_
         self.embed_tokens_: GemmaEmbedding = None
         self.norm_: GemmaRMSNorm = None
-        self.rotary_emb_ = Gemma2RotaryEmbedding(
-            config.head_dim_,
-            max_position_embeddings=config.max_seq_len_,
-            base=config.rope_theta_,
-            device=config.device_,
-        )
+        self.rotary_emb_ = Gemma2RotaryEmbedding(config)
         self.lm_head_ = Gemma2OutputLayer(config)
         self.layers_: List[Gemma2DecoderLayer] = []
 

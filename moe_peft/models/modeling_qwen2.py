@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
-from transformers.models.mistral import modeling_mistral
+from transformers.models.qwen2 import modeling_qwen2
 
 from moe_peft.common import FeedForward, LLMCache, LLMModelInput
 from moe_peft.executors import executor
@@ -21,12 +21,13 @@ from moe_peft.utils import copy_parameters
 
 
 @dataclass
-class MistralConfig(LlamaConfig):
+class Qwen2Config(LlamaConfig):
     use_sliding_window_: bool = False
+    max_window_layers_: int = None
     sliding_window_: int = None
 
 
-class MistralAttention(LlamaAttention):
+class Qwen2Attention(LlamaAttention):
     def __init__(
         self,
         wq: nn.Module,
@@ -34,7 +35,7 @@ class MistralAttention(LlamaAttention):
         wv: nn.Module,
         wo: nn.Module,
         idx: int,
-        config: MistralConfig,
+        config: Qwen2Config,
     ):
         super().__init__(wq, wk, wv, wo, idx, config)
         self.config_ = config
@@ -79,6 +80,14 @@ class MistralAttention(LlamaAttention):
                 key_states, value_states, self.layer_idx_, cache_kwargs
             )
 
+        sliding_window = None
+        if (
+            self.config_.use_sliding_window_
+            and self.config_.sliding_window_ is not None
+            and self.layer_idx >= self.config_.max_window_layers_
+        ):
+            sliding_window = self.config_.sliding_window_
+
         input_dtype = query_states.dtype
         target_dtype = None
         if input_dtype == torch.float32:
@@ -99,30 +108,26 @@ class MistralAttention(LlamaAttention):
             query_length=q_len,
             is_causal=self.is_causal_,
             target_dtype=target_dtype,
-            sliding_window=(
-                self.config_.sliding_window_
-                if self.config_.use_sliding_window_
-                else None
-            ),  # main diff with Llama
+            sliding_window=sliding_window,  # main diff with Llama
         )
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
 
         return self.o_proj_(attn_output, input_args)
 
 
-class MistralForCausalLM(LlamaForCausalLM):
-    def __init__(self, config: MistralConfig) -> None:
+class Qwen2ForCausalLM(LlamaForCausalLM):
+    def __init__(self, config: Qwen2Config) -> None:
         super().__init__(config)
 
     @staticmethod
     def from_pretrained(
-        llm_model: modeling_mistral.MistralForCausalLM,
+        llm_model: modeling_qwen2.Qwen2ForCausalLM,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
         device: str = executor.default_device_name(),
     ):
-        llm_config: modeling_mistral.MistralConfig = llm_model.config
-        llm_args = MistralConfig(
+        llm_config: modeling_qwen2.Qwen2Config = llm_model.config
+        llm_args = Qwen2Config(
             name_or_path_=llm_config.name_or_path,
             vocab_size_=llm_config.vocab_size,
             dim_=llm_config.hidden_size,
@@ -139,6 +144,7 @@ class MistralForCausalLM(LlamaForCausalLM):
             attn_implementation_=attn_impl,
             use_sliding_window_=use_sliding_window,
             sliding_window_=llm_config.sliding_window,
+            max_window_layers_=llm_config.max_window_layers,
             device_=torch.device(device),
             dtype_=llm_model.dtype,
         )
@@ -146,7 +152,7 @@ class MistralForCausalLM(LlamaForCausalLM):
         if llm_args.pad_token_id_ is None:
             llm_args.pad_token_id_ = -1
 
-        model = MistralForCausalLM(llm_args)
+        model = Qwen2ForCausalLM(llm_args)
         llm_model.requires_grad_(False)
         model.embed_tokens_ = LlamaEmbedding(
             llm_model.model.embed_tokens.weight, llm_args.pad_token_id_
@@ -156,7 +162,7 @@ class MistralForCausalLM(LlamaForCausalLM):
 
         for idx, layer in enumerate(llm_model.model.layers):
             decoder = LlamaDecoderLayer(idx)
-            decoder.self_attn_ = MistralAttention(
+            decoder.self_attn_ = Qwen2Attention(
                 layer.self_attn.q_proj,
                 layer.self_attn.k_proj,
                 layer.self_attn.v_proj,

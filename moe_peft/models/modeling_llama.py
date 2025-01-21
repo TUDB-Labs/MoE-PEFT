@@ -142,6 +142,7 @@ class LlamaAttention(LLMAttention):
         self.wo_: Linear = Linear(wo, config.device_)  # dim * dim
         # config
         self.layer_idx_ = idx
+        self.config_ = config
         self.dim_ = config.dim_
         self.n_heads_ = config.n_heads_
         self.n_kv_heads_ = config.n_kv_heads_
@@ -200,6 +201,7 @@ class LlamaAttention(LLMAttention):
             xk, xv = past_key_value.update(xk, xv, self.layer_idx_, cache_kwargs)
 
         input_dtype = xq.dtype
+        target_dtype = None
         if input_dtype == torch.float32:
             if executor.is_bf16_supported():
                 target_dtype = torch.bfloat16
@@ -212,6 +214,8 @@ class LlamaAttention(LLMAttention):
             xv,
             attention_mask,
             scaling=self.scaling_,
+            # eager attention arguments
+            model_config=self.config_,
             # flash attention arguments
             query_length=max_seq_len,
             is_causal=self.is_causal_,
