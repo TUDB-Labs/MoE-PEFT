@@ -1,11 +1,11 @@
 import inspect
-import math
 from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
 from transformers.utils import is_flash_attn_2_available
 
+from .abstracts import LLMModelConfig
 from .cache import LLMCache, StaticCache
 
 if is_flash_attn_2_available():
@@ -70,15 +70,41 @@ def prepare_4d_causal_attention_mask(
     return causal_mask
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(
+        batch, num_key_value_heads, n_rep, slen, head_dim
+    )
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 def eager_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
-    attention_mask: Optional[torch.Tensor] = None,
+    attention_mask: torch.Tensor,
+    model_config: LLMModelConfig,
+    scaling: Optional[float] = None,
+    softcap: Optional[float] = None,
+    **kwargs,
 ) -> torch.Tensor:
-    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(
-        query_states.size(-1)
-    )
+    if scaling is None:
+        scaling = model_config.head_dim_**-0.5
+
+    if model_config.n_kv_heads_ is not None:
+        n_rep = model_config.n_heads_ // model_config.n_kv_heads_
+        key_states = repeat_kv(key_states, n_rep)
+        value_states = repeat_kv(value_states, n_rep)
+
+    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
+
+    if softcap is not None:
+        attn_weights = attn_weights / softcap
+        attn_weights = torch.tanh(attn_weights)
+        attn_weights = attn_weights * softcap
+
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
@@ -222,6 +248,7 @@ def flash_attention_forward(
     max_length_q: Optional[int] = None,
     max_length_k: Optional[int] = None,
     target_dtype: Optional[torch.dtype] = None,
+    **kwargs,
 ):
     if not use_top_left_mask:
         causal = is_causal
@@ -337,3 +364,9 @@ def flash_attention_forward(
         )
 
     return attn_output
+
+
+ATTENTION_FUNCTIONS = {
+    "eager": eager_attention_forward,
+    "flash_attn": flash_attention_forward,
+}
