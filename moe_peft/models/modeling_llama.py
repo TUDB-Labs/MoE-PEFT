@@ -211,8 +211,9 @@ class LlamaAttention(LLMAttention):
             xk,
             xv,
             attention_mask,
-            query_length=max_seq_len,
             scaling=self.scaling_,
+            # flash attention arguments
+            query_length=max_seq_len,
             is_causal=self.is_causal_,
             target_dtype=target_dtype,
         )

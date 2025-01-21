@@ -1,13 +1,14 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 from transformers.models.gemma2 import modeling_gemma2
-from transformers.models.gemma2.modeling_gemma2 import apply_rotary_pos_emb, repeat_kv
-from transformers.utils import is_flash_attn_2_available
+from transformers.models.gemma2.modeling_gemma2 import apply_rotary_pos_emb
 
 from moe_peft.common import (
+    ATTENTION_FUNCTIONS,
+    ROPE_INIT_FUNCTIONS,
     FeedForward,
     Linear,
     LLMAttention,
@@ -17,7 +18,6 @@ from moe_peft.common import (
     LLMModelConfig,
     LLMModelInput,
     collect_plugin_router_logtis,
-    flash_attention_forward,
     prepare_4d_causal_attention_mask,
 )
 from moe_peft.executors import executor
@@ -34,34 +34,82 @@ class Gemma2Config(LLMModelConfig):
     query_pre_attn_scalar_: int = 224
     use_sliding_window_: bool = False
     sliding_window_: int = 4096
+    rope_scaling_: Optional[Dict[str, Any]] = None
 
 
 class Gemma2RotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+    def __init__(
+        self,
+        config: Optional[Gemma2Config],
+        scaling_factor=1.0,
+        rope_type="default",
+    ):
         super().__init__()
+        self.rope_kwargs = {
+            "rope_type": rope_type,
+            "factor": scaling_factor,
+            "dim": config.head_dim_,
+            "base": config.rope_theta_,
+            "max_position_embeddings": config.max_seq_len_,
+        }
+        if config is None:
+            self.rope_type = rope_type
+            self.max_seq_len_cached = config.max_seq_len_
+            self.original_max_seq_len = config.max_seq_len_
+        else:
+            # BC: "rope_type" was originally "type"
+            if config.rope_scaling_ is not None:
+                self.rope_type = config.rope_scaling_.get(
+                    "rope_type", config.rope_scaling_.get("type")
+                )
+            else:
+                self.rope_type = "default"
+            self.max_seq_len_cached = config.max_seq_len_
+            self.original_max_seq_len = config.max_seq_len_
 
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        inv_freq = 1.0 / (
-            self.base
-            ** (
-                torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device)
-                / self.dim
-            )
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(
+            self.config, config.device_, **self.rope_kwargs
         )
-        self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    def _dynamic_frequency_update(self, position_ids, device):
+        """
+        dynamic RoPE layers should recompute `inv_freq` in the following situations:
+        1 - growing beyond the cached sequence length (allow scaling)
+        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
+        """
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.max_seq_len_cached:  # growth
+            inv_freq, self.attention_scaling = self.rope_init_fn(
+                self.config, device, seq_len=seq_len
+            )
+            self.register_buffer(
+                "inv_freq", inv_freq, persistent=False
+            )  # TODO joao: may break with compilation
+            self.max_seq_len_cached = seq_len
+
+        if (
+            seq_len < self.original_max_seq_len
+            and self.max_seq_len_cached > self.original_max_seq_len
+        ):  # reset
+            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            self.max_seq_len_cached = self.original_max_seq_len
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        self.inv_freq.to(x.device)
+        if "dynamic" in self.rope_type:
+            self._dynamic_frequency_update(position_ids, device=x.device)
+
+        # Core RoPE block
         inv_freq_expanded = (
             self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         )
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 since bfloat16 loses precision on long contexts
-        # See https://github.com/huggingface/transformers/pull/29285
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
         device_type = (
             device_type
@@ -75,6 +123,11 @@ class Gemma2RotaryEmbedding(nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
+
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -101,10 +154,12 @@ class Gemma2Attention(LLMAttention):
         self.dim_ = config.dim_
         self.n_heads_ = config.n_heads_
         self.n_kv_heads_ = config.n_kv_heads_
-        self.n_rep_ = self.n_heads_ // self.n_kv_heads_
         self.head_dim_ = config.head_dim_
         self.dtype_ = config.dtype_
         self.is_causal_ = True
+        self.attention_interface_: Callable = ATTENTION_FUNCTIONS[
+            config.attn_implementation_
+        ]
 
         self.scaling_ = config.query_pre_attn_scalar_**-0.5
         self.sliding_window_ = (
@@ -162,113 +217,23 @@ class Gemma2Attention(LLMAttention):
                 key_states, value_states, self.layer_idx_, cache_kwargs
             )
 
-        key_states = repeat_kv(key_states, self.n_rep_)
-        value_states = repeat_kv(value_states, self.n_rep_)
-
-        attn_weights = (
-            torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling_
-        )
-
-        if self.config_.attn_logit_softcapping_ is not None:
-            attn_weights = attn_weights / self.config_.attn_logit_softcapping_
-            attn_weights = torch.tanh(attn_weights)
-            attn_weights = attn_weights * self.config_.attn_logit_softcapping_
-
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            attn_weights = attn_weights + causal_mask
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(
-            attn_weights, dim=-1, dtype=torch.float32
-        ).to(query_states.dtype)
-        attn_output = torch.matmul(attn_weights, value_states)
-        attn_output = attn_output.transpose(1, 2).contiguous()
-
-        attn_output = attn_output.view(bsz, q_len, -1)
-        return self.o_proj_(attn_output, input_args)
-
-
-class Gemma2FlashAttention2(Gemma2Attention):
-    def __init__(
-        self,
-        q_proj: nn.Module,
-        k_proj: nn.Module,
-        v_proj: nn.Module,
-        o_proj: nn.Module,
-        layer_idx: int,
-        config: Gemma2Config,
-    ):
-        assert is_flash_attn_2_available(), "Flash Attention is not available"
-        super().__init__(q_proj, k_proj, v_proj, o_proj, layer_idx, config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        input_args: LLMModelInput,
-        rotary_emb: Tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[LLMCache] = None,
-    ):
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj_(hidden_states, input_args)
-        key_states = self.k_proj_(hidden_states, input_args)
-        value_states = self.v_proj_(hidden_states, input_args)
-
-        query_states = query_states.view(
-            bsz, q_len, self.n_heads_, self.head_dim_
-        ).transpose(1, 2)
-        key_states = key_states.view(
-            bsz, q_len, self.n_kv_heads_, self.head_dim_
-        ).transpose(1, 2)
-        value_states = value_states.view(
-            bsz, q_len, self.n_kv_heads_, self.head_dim_
-        ).transpose(1, 2)
-
-        cos, sin = rotary_emb
-        query_states, key_states = apply_rotary_pos_emb(
-            query_states, key_states, cos, sin
-        )
-
-        if past_key_value is not None:
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "sliding_window": self.sliding_window_,
-                "cache_position": cache_position,
-            }
-            key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx_, cache_kwargs
-            )
-
-        if attention_mask is not None:
-            seq_len = attention_mask.shape[1]
-            key_states = key_states[:, :, :seq_len]
-            value_states = value_states[:, :, :seq_len]
-
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
             if executor.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
 
-        attn_output = flash_attention_forward(
+        attn_output = self.attention_interface_(
             query_states,
             key_states,
             value_states,
             attention_mask,
-            q_len,
+            scaling=self.scaling_,
+            # flash attention arguments
+            query_length=q_len,
             is_causal=self.is_causal_,
+            target_dtype=target_dtype,
             softmax_scale=self.scaling_,
             sliding_window=(
                 self.sliding_window_ if self.config_.use_sliding_window_ else None
@@ -278,18 +243,10 @@ class Gemma2FlashAttention2(Gemma2Attention):
                 if is_package_available("flash_attn", "2.6.0")
                 else None
             ),
-        ).to(input_dtype)
-
+        )
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-        attn_output = self.o_proj_(attn_output, input_args)
 
-        return attn_output
-
-
-GEMMA2_ATTENTION_CLASSES = {
-    "eager": Gemma2Attention,
-    "flash_attn": Gemma2FlashAttention2,
-}
+        return self.o_proj_(attn_output, input_args)
 
 
 class Gemma2DecoderLayer(LLMDecoder):
@@ -493,9 +450,7 @@ class Gemma2ForCausalLM(LLMForCausalLM):
 
         for layer_idx, layer in enumerate(llm_model.model.layers):
             decoder = Gemma2DecoderLayer(layer_idx, model_config)
-            decoder.self_attn_ = GEMMA2_ATTENTION_CLASSES[
-                model_config.attn_implementation_
-            ](
+            decoder.self_attn_ = Gemma2Attention(
                 layer.self_attn.q_proj,
                 layer.self_attn.k_proj,
                 layer.self_attn.v_proj,
