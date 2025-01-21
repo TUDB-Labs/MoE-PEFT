@@ -36,7 +36,7 @@ def prepare_4d_causal_attention_mask(
     min_dtype = torch.finfo(dtype).min
     sequence_length = input_tensor.shape[1]
     if using_static_cache:
-        target_length = past_key_values.get_max_length()
+        target_length = past_key_values.get_max_cache_shape()
     else:
         target_length = (
             attention_mask.shape[-1]
@@ -76,18 +76,20 @@ def eager_attention_forward(
     value_states: torch.Tensor,
     attention_mask: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
-    attention_score = torch.matmul(
-        query_states, key_states.transpose(2, 3)
-    ) / math.sqrt(query_states.size(-1))
+    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(
+        query_states.size(-1)
+    )
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attention_score = attention_score + causal_mask
-    attention_score = F.softmax(attention_score, dim=-1, dtype=torch.float32).to(
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
         value_states.dtype
     )
-    attention_score = torch.matmul(attention_score, value_states)
-    attention_score = attention_score.transpose(1, 2).contiguous()
-    return attention_score
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output
 
 
 def _get_unpad_data(
@@ -220,7 +222,6 @@ def flash_attention_forward(
     max_length_q: Optional[int] = None,
     max_length_k: Optional[int] = None,
     target_dtype: Optional[torch.dtype] = None,
-    **kwargs,
 ):
     if not use_top_left_mask:
         causal = is_causal
