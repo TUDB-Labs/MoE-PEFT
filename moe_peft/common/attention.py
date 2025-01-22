@@ -1,11 +1,11 @@
 import inspect
-import math
 from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
 from transformers.utils import is_flash_attn_2_available
 
+from .abstracts import LLMModelConfig
 from .cache import LLMCache, StaticCache
 
 if is_flash_attn_2_available():
@@ -36,7 +36,7 @@ def prepare_4d_causal_attention_mask(
     min_dtype = torch.finfo(dtype).min
     sequence_length = input_tensor.shape[1]
     if using_static_cache:
-        target_length = past_key_values.get_max_length()
+        target_length = past_key_values.get_max_cache_shape()
     else:
         target_length = (
             attention_mask.shape[-1]
@@ -70,24 +70,52 @@ def prepare_4d_causal_attention_mask(
     return causal_mask
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(
+        batch, num_key_value_heads, n_rep, slen, head_dim
+    )
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 def eager_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
-    attention_mask: Optional[torch.Tensor] = None,
+    attention_mask: torch.Tensor,
+    model_config: LLMModelConfig,
+    scaling: Optional[float] = None,
+    softcap: Optional[float] = None,
+    **kwargs,
 ) -> torch.Tensor:
-    attention_score = torch.matmul(
-        query_states, key_states.transpose(2, 3)
-    ) / math.sqrt(query_states.size(-1))
+    if scaling is None:
+        scaling = model_config.head_dim_**-0.5
+
+    if model_config.n_kv_heads_ is not None:
+        n_rep = model_config.n_heads_ // model_config.n_kv_heads_
+        key_states = repeat_kv(key_states, n_rep)
+        value_states = repeat_kv(value_states, n_rep)
+
+    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
+
+    if softcap is not None:
+        attn_weights = attn_weights / softcap
+        attn_weights = torch.tanh(attn_weights)
+        attn_weights = attn_weights * softcap
+
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attention_score = attention_score + causal_mask
-    attention_score = F.softmax(attention_score, dim=-1, dtype=torch.float32).to(
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
         value_states.dtype
     )
-    attention_score = torch.matmul(attention_score, value_states)
-    attention_score = attention_score.transpose(1, 2).contiguous()
-    return attention_score
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output
 
 
 def _get_unpad_data(
@@ -155,8 +183,8 @@ def _upad_input(
 
 def prepare_fa2_from_position_ids(query, key, value, position_ids):
     query = query.view(-1, query.size(-2), query.size(-1))
-    key = key.view(-1, key.size(-2), key.size(-1))
-    value = value.view(-1, value.size(-2), value.size(-1))
+    key = key.contiguous().view(-1, key.size(-2), key.size(-1))
+    value = value.contiguous().view(-1, value.size(-2), value.size(-1))
     position_ids = position_ids.flatten()
     indices_q = torch.arange(
         position_ids.size(0), device=position_ids.device, dtype=torch.int32
@@ -183,6 +211,24 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids):
     )
 
 
+def fa_peft_integration_check(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    target_dtype: Optional[torch.dtype] = None,
+):
+    if target_dtype is None:
+        return query, key, value
+
+    input_dtype = value.dtype
+    if input_dtype == torch.float32:
+        query = query.to(target_dtype)
+        key = key.to(target_dtype)
+        value = value.to(target_dtype)
+
+    return query, key, value
+
+
 def flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
@@ -197,6 +243,12 @@ def flash_attention_forward(
     use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
     deterministic: Optional[bool] = None,
+    cu_seq_lens_q: Optional[torch.LongTensor] = None,
+    cu_seq_lens_k: Optional[torch.LongTensor] = None,
+    max_length_q: Optional[int] = None,
+    max_length_k: Optional[int] = None,
+    target_dtype: Optional[torch.dtype] = None,
+    **kwargs,
 ):
     if not use_top_left_mask:
         causal = is_causal
@@ -218,6 +270,11 @@ def flash_attention_forward(
 
     if softcap is not None:
         flash_kwargs["softcap"] = softcap
+
+    # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
+    query_states, key_states, value_states = fa_peft_integration_check(
+        query_states, key_states, value_states, target_dtype
+    )
 
     # Contains at least one padding token in the sequence
     if attention_mask is not None:
@@ -245,29 +302,46 @@ def flash_attention_forward(
         )
         attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
 
-    elif (
-        position_ids is not None
-        and not (torch.diff(position_ids, dim=-1) >= 0).all()
-        and query_length != 1
+    elif position_ids is not None and (
+        max_length_q is not None
+        or (query_length != 1 and not (torch.diff(position_ids, dim=-1) >= 0).all())
     ):
         batch_size = query_states.size(0)
-        query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = (
-            prepare_fa2_from_position_ids(
+
+        if cu_seq_lens_q is None or cu_seq_lens_k is None:
+            (
+                query_states,
+                key_states,
+                value_states,
+                indices_q,
+                cu_seq_lens,
+                max_seq_lens,
+            ) = prepare_fa2_from_position_ids(
                 query_states, key_states, value_states, position_ids
             )
-        )
 
-        cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-        max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+            cu_seq_lens_q, cu_seq_lens_k = cu_seq_lens
+            max_length_q, max_length_k = max_seq_lens
+
+        else:
+            query_states = query_states.reshape(
+                -1, query_states.size(-2), query_states.size(-1)
+            )
+            key_states = key_states.reshape(
+                -1, key_states.size(-2), key_states.size(-1)
+            )
+            value_states = value_states.reshape(
+                -1, value_states.size(-2), value_states.size(-1)
+            )
 
         attn_output = flash_attn_varlen_func(
             query_states,
             key_states,
             value_states,
-            cu_seqlens_q=cu_seqlens_q,
-            cu_seqlens_k=cu_seqlens_k,
-            max_seqlen_q=max_seqlen_in_batch_q,
-            max_seqlen_k=max_seqlen_in_batch_k,
+            cu_seqlens_q=cu_seq_lens_q,
+            cu_seqlens_k=cu_seq_lens_k,
+            max_seqlen_q=max_length_q,
+            max_seqlen_k=max_length_k,
             dropout_p=dropout,
             softmax_scale=softmax_scale,
             causal=causal,
@@ -290,3 +364,9 @@ def flash_attention_forward(
         )
 
     return attn_output
+
+
+ATTENTION_FUNCTIONS = {
+    "eager": eager_attention_forward,
+    "flash_attn": flash_attention_forward,
+}

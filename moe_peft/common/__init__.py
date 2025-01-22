@@ -9,6 +9,7 @@ from .abstracts import (
     LLMOutput,
 )
 from .attention import (
+    ATTENTION_FUNCTIONS,
     eager_attention_forward,
     flash_attention_forward,
     prepare_4d_causal_attention_mask,
@@ -54,6 +55,7 @@ __all__ = [
     "prepare_4d_causal_attention_mask",
     "eager_attention_forward",
     "flash_attention_forward",
+    "ATTENTION_FUNCTIONS",
     "LLMCache",
     "DynamicCache",
     "HybridCache",
