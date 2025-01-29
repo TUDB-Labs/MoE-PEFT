@@ -327,7 +327,7 @@ def _batch_generate(
             batch_tokens_=tokens[:, prev_pos:cur_pos].tolist(),
             inference_mode_=True,
         )
-        outputs = model.forward(input_data, past_key_values)  # 推理核心过程
+        outputs = model.forward(input_data, past_key_values)
         for output in outputs:
             config = config_dict[output.adapter_name]
             start_idx = output.batch_start_idx_
@@ -441,7 +441,7 @@ def generate(
         if len(dispatch_args[0]) == 0:
             break
 
-        outputs, running_jobs = _batch_generate(  # 重要入口
+        outputs, running_jobs = _batch_generate(
             model,
             tokenizer,
             max_gen_len,

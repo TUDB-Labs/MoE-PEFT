@@ -63,7 +63,7 @@ class SVDProcessor:
         return [{name: true_keys}]
 
     def _analyze_svd_data(
-        self, data: List[List[Dict[str, List[float]]]], config, flag
+        self, data: List[List[Dict[str, List[float]]]], config,
     ) -> Dict:
         low_similarity_count = 0
         low_similarity_linear_counter = Counter()
@@ -80,11 +80,11 @@ class SVDProcessor:
 
         low_similarity_values.sort(key=lambda x: abs(x[0]))
 
-        top_10_percent_count = max(1, int(0.1 * low_similarity_count))
-        top_10_percent_values = low_similarity_values[:top_10_percent_count]
+        top_5_percent_count = max(1, int(0.05 * low_similarity_count))
+        top_5_percent_values = low_similarity_values[:top_5_percent_count]
 
         top_10_percent_linear_counter = Counter(
-            [item[1] for item in top_10_percent_values]
+            [item[1] for item in top_5_percent_values]
         )
         low_similarity_linear_distribution = dict(top_10_percent_linear_counter)
 
@@ -99,10 +99,6 @@ class SVDProcessor:
     def _analyze_svd_data_multi_expert(
         self, data: List[List[Dict[str, List[float]]]], config, single_expert_flag
     ) -> Dict:
-        """
-        当 single_expert_flag = False 时执行原有逻辑，
-        当 single_expert_flag = True 时转到 _analyze_svd_data_single_expert。
-        """
         if single_expert_flag:
             logging.info("Single expert mode is enabled.")
             return self._analyze_svd_data_single_expert(data, config)
@@ -281,14 +277,8 @@ class SVDProcessor:
     def _analyze_svd_data_single_expert(
         self, data: List[List[Dict[str, List]]], config
     ) -> Dict:
-        """
-        专门处理 single_expert_flag=True 时的数据格式，其中 w1, w2, w3 对应 MoE 层。
-        这些层下的值不再是单纯的一维列表，而是一个 [expert_0, expert_1, ...] 的列表，
-        每个 expert_i 又是一个浮点数列表。我们需要计算时额外带上 expert_index。
-        """
         moe_linear_names = {"w1", "w2", "w3"}
 
-        # ----------------- 1) 计算“平均相似度” -----------------
         avg_similarities = []
         intruder_dim_count = 0
         intruder_layer_counter = Counter()
@@ -308,9 +298,7 @@ class SVDProcessor:
                             )
 
                             for vector_idx, similarity in enumerate(expert_values):
-                                if (
-                                    abs(similarity) < 0.85
-                                ):  # ***************************** intruder threshold *****************************
+                                if (abs(similarity) < 0.85):
                                     intruder_dim_count += 1
                                     intruder_layer_counter[layer_idx] += 1
                                     intruder_linear_counter[linear_name] += 1
@@ -339,7 +327,6 @@ class SVDProcessor:
             },
         }
 
-        # ----------------- 2) 获取最低相似度的 30 个数据 -----------------
         all_similarities = []
         lowest_similarities = []
 
