@@ -1,4 +1,5 @@
 from .adapters import adapter_factory
+from .analysts import SVDProcessor
 from .common import (
     AdapterConfig,
     LLMBatchConfig,
@@ -51,4 +52,5 @@ __all__ = [
     "Tokenizer",
     "setup_logging",
     "executor",
+    "SVDProcessor",
 ]

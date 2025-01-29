@@ -97,12 +97,12 @@ class LoraFunction(torch.autograd.Function):
     @staticmethod
     def forward(
         ctx,
-        result: torch.Tensor,
-        data: torch.Tensor,
+        result: torch.Tensor,  # residual
+        data: torch.Tensor,  # hidden_states
         input_args: LLMModelInput,
         dropouts: List[float],
         scalings: List[float],
-        *args,
+        *args,  # LoRAs
     ):
         # the lora module is f32 precision
         data = data.to(torch.float32)

@@ -167,6 +167,7 @@ def init_lora_layer_weight(
     llm_config: LLMModelConfig,
     lora_config: LoraConfig,
     lora_weights: Optional[Dict[str, torch.Tensor]],
+    profiling_flag: Optional[bool] = False,
 ):
     target_modules = lora_config.target_modules_
     attn_state_dict, mlp_state_dict = transformer_layer.state_dict()
@@ -188,7 +189,7 @@ def init_lora_layer_weight(
         moe_layer_name_list = list(all_state_dict.keys())
         moe_init_strategy = "plugin"
     else:
-        model_prefix_name = "base_model.model.model"
+        model_prefix_name = "base_model.model.model"  # lora_weight
         moe_layer_name_list = []
 
     assert len(moe_layer_name_list) == 0 or moe_init_strategy in ["plugin", "fused_mlp"]
@@ -205,6 +206,7 @@ def init_lora_layer_weight(
                     f"{model_prefix_name}.layers.{transformer_layer.layer_id_}.mlp.moe_gate.weight"
                 ]
             ),
+            profiling_flag=profiling_flag,
         )
 
     for proj_name, lora_linear in all_state_dict.items():
@@ -229,6 +231,7 @@ def init_lora_layer_weight(
                         if lora_weights is not None
                         else None
                     ),
+                    profiling_flag=profiling_flag,
                 )
 
             for expert_idx in range(lora_config.num_experts_):
@@ -429,7 +432,7 @@ class LLMModel(torch.nn.Module):
 
         for decoder_layer in self.model_.decoder_stack():
             hidden_states, *router_logits = gradient_checkpoint(
-                decoder_layer.forward,
+                decoder_layer.forward,  # decoder_layer
                 hidden_states,
                 input_args,
                 rotary_emb,
@@ -470,13 +473,15 @@ class LLMModel(torch.nn.Module):
             hidden_states, cache_position.unsqueeze(0)
         )
 
-        hidden_states, all_router_logits = self._call_decoder_stack(
-            hidden_states,
-            input_args,
-            rotary_emb,
-            causal_mask,
-            cache_position,
-            past_key_values,
+        hidden_states, all_router_logits = (
+            self._call_decoder_stack(  # call decoder stack
+                hidden_states,
+                input_args,
+                rotary_emb,
+                causal_mask,
+                cache_position,
+                past_key_values,
+            )
         )
 
         # calculate loss
@@ -584,7 +589,10 @@ class LLMModel(torch.nn.Module):
         return LLMModel(model)
 
     def init_adapter(
-        self, config: AdapterConfig, weight: Optional[Dict[str, torch.Tensor]] = None
+        self,
+        config: AdapterConfig,
+        weight: Optional[Dict[str, torch.Tensor]] = None,
+        profiling_flag: Optional[bool] = False,
     ):
         # Patch for MixLoRA
         if isinstance(config, MixLoraConfig) and config.act_fn_ is None:
@@ -604,14 +612,16 @@ class LLMModel(torch.nn.Module):
             )
         else:
             output_layer = CasualOutputLayer(
-                vocab_size=self.config_.vocab_size_, weight=self.model_.lm_head_
+                vocab_size=self.config_.vocab_size_,
+                weight=self.model_.lm_head_,
             )
 
         self.output_.layers_[config.adapter_name] = output_layer
         if type(config) is not AdapterConfig:
-            # init transformer layers
             for transformer_layer in self.model_.layers_:
-                init_lora_layer_weight(transformer_layer, self.config_, config, weight)
+                init_lora_layer_weight(
+                    transformer_layer, self.config_, config, weight, profiling_flag
+                )  # LoRA weight
         else:
             assert weight is None, "can not load basic adapter with weight"
 
@@ -660,7 +670,12 @@ class LLMModel(torch.nn.Module):
 
         return lora_config, lora_weight
 
-    def load_adapter(self, name_or_path: str, adapter_name: Optional[str] = None):
+    def load_adapter(
+        self,
+        name_or_path: str,
+        adapter_name: Optional[str] = None,
+        profiling_flag: Optional[bool] = False,
+    ):
         if adapter_name is None:
             adapter_name = name_or_path
 
@@ -677,5 +692,5 @@ class LLMModel(torch.nn.Module):
             weights_only=False,
         )
 
-        self.init_adapter(lora_config, lora_weight)
+        self.init_adapter(lora_config, lora_weight, profiling_flag)
         return adapter_name

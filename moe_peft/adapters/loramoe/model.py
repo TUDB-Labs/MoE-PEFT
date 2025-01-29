@@ -1,5 +1,5 @@
 import math
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -16,6 +16,7 @@ class LoraMoe(LLMMoeBlock):
         device: torch.device,
         config: LoraMoeConfig,
         gate: Optional[torch.Tensor] = None,
+        profiling_flag: Optional[bool] = False,
     ) -> None:
         super().__init__()
 
@@ -30,6 +31,8 @@ class LoraMoe(LLMMoeBlock):
         )
         self.experts_ = config.num_experts_
         self.router_logits_: torch.Tensor = None
+        self.router_profile_: bool = profiling_flag
+        self.profiler_: List[int] = None
 
         if gate is None:
             torch.nn.init.kaiming_uniform_(
@@ -58,5 +61,12 @@ class LoraMoe(LLMMoeBlock):
                 torch.unsqueeze(routing_weights[:, :, expert_idx], -1)
                 * expert_lora.lora_forward(hidden_states)
             ).to(hidden_states.dtype)
+
+        # profiling
+        if self.router_profile_:
+            if self.profiler_ is None:
+                self.profiler_ = list(0 for _ in range(self.experts_))
+            for idx in range(self.experts_):
+                self.profiler_[idx] = 1 / self.experts_
 
         return residual

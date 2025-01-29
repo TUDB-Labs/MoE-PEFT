@@ -92,7 +92,6 @@ parser.add_argument(
     action="store_true",
     help="Use deterministic algorithms to improve the reproducibility",
 )
-
 args = parser.parse_args()
 
 
@@ -165,9 +164,24 @@ def init_adapter_config(
                 exit(0)
 
         if args.load_adapter:
-            llm_model.load_adapter(adapter_path, adapter_name)
+            if "router_profile" in lora_config and lora_config["router_profile"]:
+                llm_model.load_adapter(
+                    adapter_path,
+                    adapter_name,
+                    True,
+                )
+            else:
+                llm_model.load_adapter(adapter_path, adapter_name)
         else:
-            llm_model.init_adapter(moe_peft.adapters.lora_config_factory(lora_config))
+            if "router_profile" in lora_config and lora_config["router_profile"]:
+                llm_model.init_adapter(
+                    moe_peft.adapters.lora_config_factory(lora_config),
+                    profiling_flag=True,
+                )
+            else:
+                llm_model.init_adapter(
+                    moe_peft.adapters.lora_config_factory(lora_config)
+                )
 
         if args.inference:
             config_class = moe_peft.GenerateConfig(adapter_name=adapter_name)
@@ -261,6 +275,7 @@ if __name__ == "__main__":
         config = json.load(fp)
 
     tokenizer, model = load_base_model()
+
     adapters = init_adapter_config(config, model)
 
     moe_peft_executor.empty_cache()

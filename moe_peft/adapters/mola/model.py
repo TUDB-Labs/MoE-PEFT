@@ -1,5 +1,5 @@
 import math
-from typing import Optional
+from typing import List, Optional
 
 import torch
 import torch.nn.functional as F
@@ -84,6 +84,7 @@ class MolaSparseMoe(LLMMoeBlock):
         device: torch.device,
         config: MolaConfig,
         gate: Optional[torch.Tensor] = None,
+        profiling_flag: Optional[bool] = False,
     ) -> None:
         super().__init__()
 
@@ -99,6 +100,8 @@ class MolaSparseMoe(LLMMoeBlock):
         self.experts_ = config.num_experts_
         self.topk_ = config.top_k_
         self.router_logits_: torch.Tensor = None
+        self.router_profile_: bool = profiling_flag
+        self.profiler_: List[int] = None
 
         if gate is None:
             torch.nn.init.kaiming_uniform_(
@@ -107,6 +110,28 @@ class MolaSparseMoe(LLMMoeBlock):
         else:
             with torch.no_grad():
                 self.gate_.weight.copy_(gate)
+
+    def _profiling(
+        self, batch_size: int, sequence_length: int, selected_experts: torch.Tensor
+    ) -> None:
+        if not self.router_profile_:
+            return
+
+        router_statistic_ = list(0 for _ in range(self.experts_))
+        for selected in selected_experts.tolist():
+            for idx in selected:
+                router_statistic_[idx] += 1
+
+        if self.profiler_ is None:
+            self.profiler_ = list(0 for _ in range(self.experts_))
+            for idx in range(self.experts_):
+                self.profiler_[idx] = (
+                    router_statistic_[idx] / batch_size
+                ) / sequence_length
+        else:
+            for idx in range(self.experts_):
+                pressure = (router_statistic_[idx] / batch_size) / sequence_length
+                self.profiler_[idx] = (self.profiler_[idx] + pressure) / 2
 
     def forward(
         self,
@@ -125,6 +150,9 @@ class MolaSparseMoe(LLMMoeBlock):
         routing_weights, selected_experts = torch.topk(
             routing_weights_before, self.topk_, dim=-1
         )
+
+        self._profiling(batch_size, sequence_length, selected_experts)
+
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
 
         expert_mask = torch.nn.functional.one_hot(

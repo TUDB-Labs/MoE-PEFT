@@ -6,7 +6,8 @@ from typing import Dict, List
 
 import torch
 
-from .adapters import MixLoraConfig
+from .adapters import LoraMoeConfig, MixLoraConfig, MolaConfig
+from .analysts import SVDProcessor
 from .common import InputData, LLMBatchConfig, LLMModelInput, Prompt
 from .model import LLMModel
 from .tasks import BasicMetric, BasicTask, CommonSenseTask, task_dict
@@ -20,6 +21,10 @@ class EvaluateConfig:
     data_path: str = None
     batch_size: int = 16
     router_profile: bool = False
+    svd_ana: bool = False
+    svd_cos_file: bool = False
+    moe_flag: bool = False
+    target_modules: Dict = None
     # Do not set these manually
     task_: BasicTask = None
     data_: List[InputData] = None
@@ -44,6 +49,11 @@ class EvaluateConfig:
         adapter_name = config["name"]
         data_path = config.get("data", None)
         task_list = config.get("task_name", "casual").split(";")
+        profile = config.get("router_profile", False)
+        svd_ana = config.get("svd_analysis", False)
+        svd_cos_file = config.get("svd_cos_file", False)
+        moe_flag = svd_ana and ("routing_strategy" in config)
+        target_modules = config.get("target_modules", None) if svd_ana else None
         path_list = (
             [None] * len(task_list) if data_path is None else data_path.split(";")
         )
@@ -57,6 +67,11 @@ class EvaluateConfig:
                     task_name=task_name_,
                     data_path=data_path_,
                     batch_size=config["evaluate_batch_size"],
+                    router_profile=True if profile else False,
+                    svd_ana=True if svd_ana else False,
+                    svd_cos_file=True if svd_cos_file else False,
+                    moe_flag=True if moe_flag else False,
+                    target_modules=target_modules if target_modules else None,
                 )
             )
 
@@ -94,7 +109,10 @@ class EvaluateConfig:
 def _prepare_tasks(model, tokenizer, configs):
     for config in configs:
         config.prepare(tokenizer, model.device_)
-        if not isinstance(model.adapter_configs_[config.adapter_name], MixLoraConfig):
+        if not isinstance(
+            model.adapter_configs_[config.adapter_name],
+            (MixLoraConfig, MolaConfig, LoraMoeConfig),
+        ):
             continue
         for layer in model.model_.layers_:
             if config.adapter_name in layer.mlp_.moes_:
@@ -162,6 +180,56 @@ def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
     )
 
 
+def _accumulate_router_statistic(model, config, reset_profile=False):
+    adapter_config = model.adapter_configs_[config.adapter_name]
+
+    # Only accumulate statistics if adapter_config is an instance of (MixLoraConfig, MolaConfig) and not LoraMoeConfig
+    if not (
+        isinstance(adapter_config, (MixLoraConfig, MolaConfig))
+        and not isinstance(adapter_config, LoraMoeConfig)
+    ):
+        return None
+
+    router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
+
+    # Iterate through each layer of the model and collect counts from profiler_
+    for layer in model.model_.layers_:
+        # If the current adapter is in the MLP's moes_
+        if config.adapter_name in layer.mlp_.moes_:
+            for idx, val in enumerate(layer.mlp_.moes_[config.adapter_name].profiler_):
+                router_statistic_[idx] += val
+
+            # Only reset profiler_ if needed and conditions are met
+            if reset_profile:
+                layer.mlp_.moes_[config.adapter_name].profiler_ = None
+
+        else:
+            # self_attn
+            for attr in ["wq_", "wk_", "wv_", "wo_"]:
+                moes_attr = getattr(layer.self_attn_, attr).moes_
+                if config.adapter_name in moes_attr:
+                    if moes_attr[config.adapter_name].profiler_ is not None:
+                        for idx, val in enumerate(
+                            moes_attr[config.adapter_name].profiler_
+                        ):
+                            router_statistic_[idx] += val
+                    # Skip if profiler_ is None or adapter_name is not in moes_attr
+                # Skip if adapter_name is not in moes_attr
+
+            # MLP
+            for attr in ["w1_", "w2_", "w3_"]:
+                moes_attr = getattr(layer.mlp_.mlp_, attr).moes_
+                if config.adapter_name in moes_attr:
+                    if moes_attr[config.adapter_name].profiler_ is not None:
+                        for idx, val in enumerate(
+                            moes_attr[config.adapter_name].profiler_
+                        ):
+                            router_statistic_[idx] += val
+                    # Similarly, skip if adapter_name is not in moes_attr or profiler_ is None
+
+    return router_statistic_
+
+
 def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, outputs):
     for idx, output in enumerate(outputs):
         config: EvaluateConfig = current_configs[idx]
@@ -171,22 +239,20 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
         end_idx = output.batch_end_idx_
         logits = output.logits
 
+        # Extract router_statistic_ logic and handle it uniformly with _accumulate_router_statistic
         if config.router_profile:
-            adapter_config = model.adapter_configs_[config.adapter_name]
-            if isinstance(adapter_config, MixLoraConfig):
-                router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
-                for layer in model.model_.layers_:
-                    if config.adapter_name not in layer.mlp_.moes_:
-                        continue
-                    for idx, val in enumerate(
-                        layer.mlp_.moes_[config.adapter_name].profiler_
-                    ):
-                        router_statistic_[idx] += val
-                for idx, val in enumerate(router_statistic_):
+            router_statistic_ = _accumulate_router_statistic(
+                model,
+                config,
+                reset_profile=False,  # In _compute_metrics, resetting profiler_ is not required
+            )
+            if router_statistic_ is not None and any(router_statistic_):
+                for r_idx, val in enumerate(router_statistic_):
                     logging.info(
-                        f"{config.adapter_name}: expert {idx}, load = {val / 32}"
+                        f"{config.adapter_name}: expert {r_idx}, load = {val / 32}"
                     )
 
+        # The following is the original logits processing and metric computation logic
         batch_size = logits.shape[0]
         pooled_logits = logits[
             torch.arange(batch_size, device=logits.device),
@@ -197,6 +263,7 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
             dtype=task.label_dtype_,
             device=logits.device,
         )
+
         if task.task_type_ == "common_sense":
             pooled_logits = pooled_logits[:, config.label_indices_]
             pooled_logits = pooled_logits.softmax(-1).argmax(-1)
@@ -226,19 +293,19 @@ def _compute_result(model, configs, save_file):
         }
         compute_results = config.metric_.compute()
         result["metrics"] = compute_results
+
+        # Extract router_statistic_ logic and handle it uniformly with _accumulate_router_statistic
+        # At this point, according to the original logic, if it's not svd_ana and router_profile is needed, reset profiler_
         if config.router_profile:
-            adapter_config = model.adapter_configs_[config.adapter_name]
-            if isinstance(adapter_config, MixLoraConfig):
-                router_statistic_ = list(0 for _ in range(adapter_config.num_experts_))
-                for layer in model.model_.layers_:
-                    if config.adapter_name not in layer.mlp_.moes_:
-                        continue
-                    for idx, val in enumerate(
-                        layer.mlp_.moes_[config.adapter_name].profiler_
-                    ):
-                        router_statistic_[idx] += val
-                    layer.mlp_.moes_[config.adapter_name].profiler_ = None
-                result["router_profile"] = list(val / 32 for val in router_statistic_)
+            router_statistic_ = _accumulate_router_statistic(
+                model,
+                config,
+                reset_profile=(
+                    not getattr(config, "svd_ana", False) and config.router_profile
+                ),
+            )
+            if router_statistic_ is not None and any(router_statistic_):
+                result["router_profile"] = list(val / 224 for val in router_statistic_)
 
         results.append(result)
 
@@ -320,5 +387,24 @@ def evaluate(
 
         for config in current_configs:
             config.rollback_start_idx_ = config.batch_start_idx_
+
+    if config.svd_ana:
+        for config in configs:  # call analyst process
+            processor = SVDProcessor(model, config)
+            if not config.svd_cos_file:
+                svd_result = processor.process()
+            else:
+                svd_result = processor.process(all_result=True)
+
+            file = (
+                f"svd_result_{config.adapter_name}_50%_rvt5%.json"
+                if not save_file
+                else save_file
+            )
+            with open(file, "w") as f:
+                json.dump(svd_result, f, indent=4)
+            logging.info(f"saving svd_analysis result to {file}")
+
+        return _compute_result(model, configs, save_file)
 
     return _compute_result(model, configs, save_file)
