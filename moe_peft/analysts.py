@@ -63,7 +63,9 @@ class SVDProcessor:
         return [{name: true_keys}]
 
     def _analyze_svd_data(
-        self, data: List[List[Dict[str, List[float]]]], config,
+        self,
+        data: List[List[Dict[str, List[float]]]],
+        config,
     ) -> Dict:
         low_similarity_count = 0
         low_similarity_linear_counter = Counter()
@@ -298,7 +300,7 @@ class SVDProcessor:
                             )
 
                             for vector_idx, similarity in enumerate(expert_values):
-                                if (abs(similarity) < 0.85):
+                                if abs(similarity) < 0.85:
                                     intruder_dim_count += 1
                                     intruder_layer_counter[layer_idx] += 1
                                     intruder_linear_counter[linear_name] += 1

@@ -254,14 +254,10 @@ def init_lora_layer_weight(
                 lora_a = None
                 lora_b = None
             else:
-                lora_a = lora_weights.get(
-                    f"{module_name}.lora_A.weight", None
-                )
+                lora_a = lora_weights.get(f"{module_name}.lora_A.weight", None)
                 lora_b = lora_weights.get(f"{module_name}.lora_B.weight", None)
 
-            lora_linear.init_lora_weight(
-                lora_config, (lora_a, lora_b)
-            )
+            lora_linear.init_lora_weight(lora_config, (lora_a, lora_b))
 
 
 def get_lora_layer_weight(
