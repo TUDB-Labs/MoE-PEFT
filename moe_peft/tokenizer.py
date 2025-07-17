@@ -9,7 +9,7 @@ from .modules import Masks, Tokens
 class Tokenizer:
     def __init__(self, model_path: str):
         self.tokenizer = AutoTokenizer.from_pretrained(
-            model_path, trust_remote_code=True
+            "QCRI/Fanar-1-9B-Instruct", trust_remote_code=True
         )
         self.vocab_size_ = self.tokenizer.vocab_size
         self.padding_side_ = self.tokenizer.padding_side

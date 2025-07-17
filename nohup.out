@@ -1,0 +1,66 @@
+[2025-07-16 16:49:13,912] MoE-PEFT: NVIDIA CUDA initialized successfully.
+[2025-07-16 16:49:13,918] MoE-PEFT: Initializing pre-trained model.
+[2025-07-16 16:49:13,921] MoE-PEFT: Loading model with half precision.
+[2025-07-16 16:52:33,332] MoE-PEFT: Use eager as attention implementation.
+[2025-07-16 16:52:37,503] MoE-PEFT: Detecting <pad> is None, setting to <unk> by default.
+[2025-07-16 16:52:37,792] MoE-PEFT: Using efficient operators.
+[2025-07-16 16:52:37,799] MoE-PEFT: casual_0 total trainable params: 69746688
+[2025-07-16 16:52:37,802] MoE-PEFT: casual_0 total trainable params (except gates): 69386240
+Generating train split: 0 examples [00:00, ? examples/s]Generating train split: 0 examples [00:00, ? examples/s]Generating train split: 0 examples [00:00, ? examples/s]
+Traceback (most recent call last):
+  File "/export/home/hhassan/anaconda3/envs/mixlora/lib/python3.10/site-packages/datasets/packaged_modules/json/json.py", line 137, in _generate_tables
+    pa_table = paj.read_json(
+  File "pyarrow/_json.pyx", line 342, in pyarrow._json.read_json
+  File "pyarrow/error.pxi", line 155, in pyarrow.lib.pyarrow_internal_check_status
+  File "pyarrow/error.pxi", line 92, in pyarrow.lib.check_status
+pyarrow.lib.ArrowInvalid: JSON parse error: Column() changed from object to array in row 0
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/export/home/hhassan/anaconda3/envs/mixlora/lib/python3.10/site-packages/datasets/builder.py", line 1855, in _prepare_split_single
+    for _, table in generator:
+  File "/export/home/hhassan/anaconda3/envs/mixlora/lib/python3.10/site-packages/datasets/packaged_modules/json/json.py", line 167, in _generate_tables
+    pa_table = pa.Table.from_pandas(df, preserve_index=False)
+  File "pyarrow/table.pxi", line 4793, in pyarrow.lib.Table.from_pandas
+  File "/export/home/hhassan/anaconda3/envs/mixlora/lib/python3.10/site-packages/pyarrow/pandas_compat.py", line 639, in dataframe_to_arrays
+    arrays = [convert_column(c, f)
+  File "/export/home/hhassan/anaconda3/envs/mixlora/lib/python3.10/site-packages/pyarrow/pandas_compat.py", line 639, in <listcomp>
+    arrays = [convert_column(c, f)
+  File "/export/home/hhassan/anaconda3/envs/mixlora/lib/python3.10/site-packages/pyarrow/pandas_compat.py", line 626, in convert_column
+    raise e
+  File "/export/home/hhassan/anaconda3/envs/mixlora/lib/python3.10/site-packages/pyarrow/pandas_compat.py", line 620, in convert_column
+    result = pa.array(col, type=type_, from_pandas=True, safe=safe)
+  File "pyarrow/array.pxi", line 365, in pyarrow.lib.array
+  File "pyarrow/array.pxi", line 90, in pyarrow.lib._ndarray_to_array
+  File "pyarrow/error.pxi", line 92, in pyarrow.lib.check_status
+pyarrow.lib.ArrowTypeError: ("Expected bytes, got a 'int' object", 'Conversion failed for column id with type object')
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/export/home/hhassan/MoE-PEFT/moe_peft.py", line 288, in <module>
+    moe_peft.train(
+  File "/export/home/hhassan/MoE-PEFT/moe_peft/trainer.py", line 312, in train
+    input_args = dispatcher.get_train_data()
+  File "/export/home/hhassan/MoE-PEFT/moe_peft/dispatcher.py", line 290, in get_train_data
+    self.__dispatch_task_in()
+  File "/export/home/hhassan/MoE-PEFT/moe_peft/dispatcher.py", line 271, in __dispatch_task_in
+    task.load_data()
+  File "/export/home/hhassan/MoE-PEFT/moe_peft/dispatcher.py", line 85, in load_data
+    self.train_token_data_ = self.dataload_function_(self.tokenizer_)
+  File "/export/home/hhassan/MoE-PEFT/moe_peft/trainer.py", line 79, in _dataload_fn
+    data = self.task_.loading_data(True, self.data_path)
+  File "/export/home/hhassan/MoE-PEFT/moe_peft/tasks/common.py", line 79, in loading_data
+    data = hf_datasets.load_dataset("json", data_files=path)
+  File "/export/home/hhassan/anaconda3/envs/mixlora/lib/python3.10/site-packages/datasets/load.py", line 2084, in load_dataset
+    builder_instance.download_and_prepare(
+  File "/export/home/hhassan/anaconda3/envs/mixlora/lib/python3.10/site-packages/datasets/builder.py", line 925, in download_and_prepare
+    self._download_and_prepare(
+  File "/export/home/hhassan/anaconda3/envs/mixlora/lib/python3.10/site-packages/datasets/builder.py", line 1001, in _download_and_prepare
+    self._prepare_split(split_generator, **prepare_split_kwargs)
+  File "/export/home/hhassan/anaconda3/envs/mixlora/lib/python3.10/site-packages/datasets/builder.py", line 1742, in _prepare_split
+    for job_id, done, content in self._prepare_split_single(
+  File "/export/home/hhassan/anaconda3/envs/mixlora/lib/python3.10/site-packages/datasets/builder.py", line 1898, in _prepare_split_single
+    raise DatasetGenerationError("An error occurred while generating the dataset") from e
+datasets.exceptions.DatasetGenerationError: An error occurred while generating the dataset

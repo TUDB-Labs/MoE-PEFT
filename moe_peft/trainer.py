@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 import torch
-from transformers import get_scheduler
+from transformers import get_scheduler, AutoTokenizer
 
 from .backends import no_cache
 from .dispatcher import Dispatcher, DispatcherConfig, TrainTask
@@ -74,24 +74,87 @@ class TrainConfig(DispatcherConfig):
             evaluate_configs_=EvaluateConfig.from_config(config),
         )
 
-    def _dataload_fn(self, tokenizer: Tokenizer, **tokenizer_kwargs):
-        prompter = None
-        data = self.task_.loading_data(True, self.data_path)
-        for idx, data_point in enumerate(data):
-            if isinstance(data_point.inputs, Prompt):
-                if prompter is None:
-                    prompter = Prompter(self.prompt_template)
-                data_point.inputs = prompter.generate_prompt(
-                    instruction=data_point.inputs.instruction,
-                    input=data_point.inputs.input,
-                    label=data_point.inputs.label,
-                )
+    # def _dataload_fn(self, tokenizer: Tokenizer, **tokenizer_kwargs):
+    #     # print(f"Called _dataload_fn for {self.adapter_name}")
+    #     prompter = None
+    #     data = self.task_.loading_data(True, self.data_path)
+    #     for idx, data_point in enumerate(data):
+    #         # print("DATA POINT", data_point)
+    #         # print(f"Processing data point {idx + 1}/{len(data)} for {self.adapter_name}")
+    #         if isinstance(data_point.inputs, Prompt):
+    #             if prompter is None:
+    #                 prompter = Prompter(self.prompt_template)
+    #             data_point.inputs = prompter.generate_prompt(
+    #                 instruction=data_point.inputs.instruction,
+    #                 input=data_point.inputs.input,
+    #                 label=data_point.inputs.label,
+    #             )
+    #         # print(f"Data point inputs: {data_point.inputs}")
+    #         data_point.tokens = tokenizer.encode(data_point.inputs, **tokenizer_kwargs)
+    #         # print(f"Data point tokens: {data_point.tokens}")
+    #         # print(f"Whole Data point: {data_point}")
+    #         if idx % 10000 == 0:
+    #             logging.info(f"Encode text data: {idx}/{len(data)}")
 
-            data_point.tokens = tokenizer.encode(data_point.inputs, **tokenizer_kwargs)
+    #     return data
+    def _dataload_fn(self, tokenizer: Tokenizer, **tokenizer_kwargs):
+        # print(f"Called _dataload_fn for {self.adapter_name}")
+        
+        # Load first 20 entries from the combined instructional file
+        data_file_path = "/export/home/hhassan/palmx/data/by_country/mixing/combined_regional_dataset_with_instructions_fixed.jsonl"
+        data = []
+        
+        with open(data_file_path, 'r', encoding='utf-8') as f:
+                for i, line in enumerate(f):
+                    if i >= 4:  # Only load first 20 entries
+                        break
+                    entry = json.loads(line.strip())
+                    data.append(entry)
+        
+        # Setup proper tokenizer for Fanar
+        fanar_tokenizer = AutoTokenizer.from_pretrained("QCRI/Fanar-1-9B-Instruct")
+        fanar_tokenizer.pad_token = fanar_tokenizer.eos_token
+        
+        def format_mcq(row):
+            messages = [
+                {"role": "system", "content": "You're a helpful assistant that answers multiple-choice questions accurately. Choose the best answer based only on the given question and options."},
+                {"role": "user", "content": f"{row['question']}\n\nA. {row['A']}\nB. {row['B']}\nC. {row['C']}\nD. {row['D']}"},
+                {"role": "assistant", "content": row["answer"]},
+            ]
+            text = fanar_tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,  # Set to True if returning tokenized input
+                add_generation_prompt=False,  # True if you want to leave the assistant turn open-ended
+                max_length=512,
+                truncation=True
+            )
+            print(f"Formatted text: {text}")
+            return {"text": text}
+        
+        # Process data similar to the original function
+        processed_data = []
+        for idx, row in enumerate(data):
+            # Format the MCQ data using chat template
+            formatted_data = format_mcq(row)
+            formatted_text = formatted_data["text"]
+            
+            # Tokenize the formatted text
+            tokens = tokenizer.encode(formatted_text, **tokenizer_kwargs)
+            
+            # Create InputData object with proper structure
+            from .modules import InputData
+            data_point = InputData(
+                inputs=formatted_text,
+                tokens=tokens,
+                labels=None  # labels will be set to tokens.copy() in dispatcher if None
+            )
+            
+            processed_data.append(data_point)
+            
             if idx % 10000 == 0:
                 logging.info(f"Encode text data: {idx}/{len(data)}")
 
-        return data
+        return processed_data
 
     def dispatcher_context(self) -> Dict[str, any]:
         return {

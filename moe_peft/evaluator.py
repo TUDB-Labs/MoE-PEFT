@@ -27,7 +27,9 @@ class EvaluateConfig:
     batch_start_idx_: int = 0
     batch_end_idx_: int = 0
 
+
     def _dataload_fn(self, tokenizer: Tokenizer, **tokenizer_kwargs):
+        print(f"Called _dataload_fn for {self.adapter_name} in evaluator.py")
         data = self.task_.loading_data(False, self.data_path)
         for idx, data_point in enumerate(data):
             assert not isinstance(data_point.inputs, Prompt)

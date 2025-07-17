@@ -1,258 +1,118 @@
 [
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    },
-    {
-        "instruction": "Could you provide an introduction to MoE-PEFT?",
-        "output": "MoE-PEFT is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for efficient fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others."
-    }
+  {
+    "id": "d3c51141935a460fbc5823fbcc1954e6",
+    "question": "Select the right answer from the given choices: متى تم اكتشاف النفط في الكويت؟",
+    "A": "في عام 1925 اكتشف النفط في الكويت أثناء عمليات البحث عن المياه الجوفية.",
+    "B": "في عام 1950 تم اكتشاف النفط في الكويت بعد انتهاء الحرب العالمية الثانية.",
+    "C": "في عام 1946 تم اكتشاف النفط في الكويت وبدأ الإنتاج مباشرة بعد انتهاء الحرب.",
+    "D": "تم اكتشاف النفط في الكويت عام 1938 في حقل برقان.",
+    "answer": "D",
+    "country": "Kuwait",
+    "dataset_source": "palmx_nativqa",
+    "region": "Gulf",
+    "expert_id": 2,
+    "instruction": "Select the right answer from the given choices:",
+    "instruction_language": "english"
+  },
+  {
+    "id": "d3c51141935a460fbc5823fbcc1954e6",
+    "question": "متى تم اكتشاف النفط في الكويت؟",
+    "A": "في عام 1925 اكتشف النفط في الكويت أثناء عمليات البحث عن المياه الجوفية.",
+    "B": "في عام 1950 تم اكتشاف النفط في الكويت بعد انتهاء الحرب العالمية الثانية.",
+    "C": "في عام 1946 تم اكتشاف النفط في الكويت وبدأ الإنتاج مباشرة بعد انتهاء الحرب.",
+    "D": "تم اكتشاف النفط في الكويت عام 1938 في حقل برقان.",
+    "answer": "D",
+    "country": "Kuwait",
+    "dataset_source": "palmx_nativqa",
+    "region": "Gulf",
+    "expert_id": 2,
+    "instruction_language": "none"
+  },
+  {
+    "id": "83e725b272512e85b6616e8ad163df61",
+    "question": "كيف يمكنني نسخ مخطوط؟",
+    "A": "ﻧﺴﺦ اﻟﻤﺨﻄﻮط ﯾﺘﻢ ﺑﺎﻟﺘﻌﻤﺪ ﻋﻠﻰ اﻟﺘﺮﺟﻤﺔ إﻟﻰ ﻟﻐﺔ أﺧﺮى ﺛﻢ إﻋﺎدة ﺗﺮﺟﻤﺘﻪ إﻟﻰ اﻟﻌﺮﺑﯿﺔ.",
+    "B": "ﯾﻤﻜﻦ ﻧﺴﺦ اﻟﻤﺨﻄﻮط ﺑﻜﺘﺎﺑﺔ اﻟﻤﺤﺘﻮى ﻣﻦ اﻟﺬاﻛﺮة دوﻧﺎ اﻟﺮﺟﻮع إﻟﻰ أﻱ ﻧﺴﺨﺔ.",
+    "C": "ﯾﺘﻢ ﻧﺴﺦ اﻟﻤﺨﻄﻮط ﺑﺎﺳﺘﺨﺪام اﻟﺘﺼﻮﯾﺮ اﻟﻀﻮﺋﻲ ﻓﻘﻂ وﺑﻐﺾ اﻟﻨﻈﺮ ﻋﻦ اﻟﻨﺴﺨﺔ اﻻﺻﻠﯿﺔ.",
+    "D": "يتم نسخ المخطوط بالاعتماد على النسخة الأصلية التي كتبها أو أجازها المؤلف، أو نسخ لاحقة منقولة عنها.",
+    "answer": "D",
+    "country": "Tunisia",
+    "dataset_source": "palmx_nativqa",
+    "region": "Maghrebi",
+    "expert_id": 0,
+    "instruction_language": "none"
+  },
+  {
+    "id": "e2ae89855178d0695243e91c547da286",
+    "question": "Select the answer, don’t skip. ما هو التركيب السكاني في سوريا؟",
+    "A": "يقدَّر التركيب السكاني في سوريا بـ77% مسلمون سنة، 10% علويون، 3% دروز وإسماعيليون وشيعة اثني عشرية، و8% مسيحيون من طوائف مختلفة، بالإضافة إلى أقلية يزيدية.",
+    "B": "الغالبية من السكان في سوريا من المسيحيين الأرثوذكس، يليهم الشيعة الاثني عشرية والدروز، مع وجود أقلية كردية كبيرة في الشمال.",
+    "C": "يشكل العلويون الأغلبية الساحقة في سوريا، بينما يشكل السنة أقلية صغيرة، وتوجد جماعات يهودية كبيرة في دمشق وحلب.",
+    "D": "تتوزع التركيبة السكانية بين 50% من الدروز، و20% من المسيحيين، و15% من الإسماعيليين، و10% من العلويين، مع وجود أقلية شركسية في الجنوب.",
+    "answer": "A",
+    "country": "Syria",
+    "dataset_source": "palmx_nativqa",
+    "region": "Levantine",
+    "expert_id": 1,
+    "instruction": "Select the answer, don’t skip.",
+    "instruction_language": "english"
+  },
+  {
+    "id": "e2ae89855178d0695243e91c547da286",
+    "question": "ما هو التركيب السكاني في سوريا؟",
+    "A": "يقدَّر التركيب السكاني في سوريا بـ77% مسلمون سنة، 10% علويون، 3% دروز وإسماعيليون وشيعة اثني عشرية، و8% مسيحيون من طوائف مختلفة، بالإضافة إلى أقلية يزيدية.",
+    "B": "الغالبية من السكان في سوريا من المسيحيين الأرثوذكس، يليهم الشيعة الاثني عشرية والدروز، مع وجود أقلية كردية كبيرة في الشمال.",
+    "C": "يشكل العلويون الأغلبية الساحقة في سوريا، بينما يشكل السنة أقلية صغيرة، وتوجد جماعات يهودية كبيرة في دمشق وحلب.",
+    "D": "تتوزع التركيبة السكانية بين 50% من الدروز، و20% من المسيحيين، و15% من الإسماعيليين، و10% من العلويين، مع وجود أقلية شركسية في الجنوب.",
+    "answer": "A",
+    "country": "Syria",
+    "dataset_source": "palmx_nativqa",
+    "region": "Levantine",
+    "expert_id": 1,
+    "instruction_language": "none"
+  },
+  {
+    "id": "09d9a340f8123b805a4310474020c769",
+    "question": "اختار اجابة من الخيارات اللي قدامك. ما هي عشبة اللوف الفلسطيني؟",
+    "A": "اللوف الفلسطيني هو نوع من الأعشاب الطبية المستخدمة في تحضير العطور والمراهم فقط، وينتمي إلى عائلة النعناع.",
+    "B": "اللوف الفلسطيني هو نبات عشبي معمر من فصيلة اللوفية، موطنه الأصلي بلاد الشام ويستخدم في المطبخ الفلسطيني بعد طهيه جيداً.",
+    "C": "اللوف الفلسطيني هو نوع من الأعشاب البحرية التي تنمو في مياه البحر الأبيض المتوسط وتستخدم في تحضير الأطباق البحرية.",
+    "D": "اللوف الفلسطيني هو شجرة مثمرة تنتج ثماراً صغيرة حمراء تشبه الكرز، وتزرع بشكل أساسي في المناطق الجبلية.",
+    "answer": "B",
+    "country": "Palestine",
+    "dataset_source": "palmx_nativqa",
+    "region": "Levantine",
+    "expert_id": 1,
+    "instruction": "اختار اجابة من الخيارات اللي قدامك.",
+    "instruction_language": "arabic"
+  },
+  {
+    "id": "09d9a340f8123b805a4310474020c769",
+    "question": "ما هي عشبة اللوف الفلسطيني؟",
+    "A": "اللوف الفلسطيني هو نوع من الأعشاب الطبية المستخدمة في تحضير العطور والمراهم فقط، وينتمي إلى عائلة النعناع.",
+    "B": "اللوف الفلسطيني هو نبات عشبي معمر من فصيلة اللوفية، موطنه الأصلي بلاد الشام ويستخدم في المطبخ الفلسطيني بعد طهيه جيداً.",
+    "C": "اللوف الفلسطيني هو نوع من الأعشاب البحرية التي تنمو في مياه البحر الأبيض المتوسط وتستخدم في تحضير الأطباق البحرية.",
+    "D": "اللوف الفلسطيني هو شجرة مثمرة تنتج ثماراً صغيرة حمراء تشبه الكرز، وتزرع بشكل أساسي في المناطق الجبلية.",
+    "answer": "B",
+    "country": "Palestine",
+    "dataset_source": "palmx_nativqa",
+    "region": "Levantine",
+    "expert_id": 1,
+    "instruction_language": "none"
+  },
+  {
+    "id": "0d5177da56e10bb9fa3e683d10711b6d",
+    "question": "شنو الجواب الصحيح لهذا السؤال؟ ما هو دور المغاربة في تحرير القدس؟",
+    "A": "أسس المغاربة إمارة مستقلة في القدس بعد تحريرها من الصليبيين.",
+    "B": "كان دور المغاربة يقتصر على تقديم الدعم المالي فقط دون المشاركة العسكرية في تحرير القدس.",
+    "C": "قاد المغاربة الحملة الصليبية الثالثة بأنفسهم لتحرير القدس من الصليبيين.",
+    "D": "شارك المغاربة بشكل بارز في تحرير القدس مع جيش صلاح الدين الأيوبي، حيث شكلوا نحو 20% إلى 25% من الجيش الذي انتصر في معركة حطين عام 1187.",
+    "answer": "D",
+    "country": "Morocco",
+    "dataset_source": "palmx_nativqa",
+    "region": "Maghrebi",
+    "expert_id": 0,
+    "instruction": "شنو الجواب الصحيح لهذا السؤال؟",
+    "instruction_language": "arabic"
+  }
 ]
