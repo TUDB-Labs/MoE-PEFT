@@ -13,7 +13,11 @@ def main(
         torch_dtype=torch.bfloat16,
         device_map=device,
     )
-    model = PeftModel.from_pretrained(model, lora_weights, torch_dtype=torch.float32)
+    model = PeftModel.from_pretrained(
+        model,
+        lora_weights,
+        torch_dtype=torch.float32,
+    )
     input_ids = tokenizer(instruction, return_tensors="pt").input_ids.to(device)
     output = ""
     with torch.inference_mode():

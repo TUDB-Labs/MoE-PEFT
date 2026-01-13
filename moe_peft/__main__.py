@@ -8,92 +8,108 @@ from typing import Dict, List, Tuple, Union
 import torch
 from transformers.utils import is_flash_attn_2_available
 
-import moe_peft
-import moe_peft.adapters
+from .adapters import lora_config_factory
+from .evaluator import EvaluateConfig, evaluate
+from .executors import executor as moe_peft_executor
+from .generator import GenerateConfig, generate
+from .model import LLMModel
+from .tokenizer import Tokenizer
+from .trainer import TrainConfig, train
+from .utils import setup_logging
 
-# Command Line Arguments
-parser = argparse.ArgumentParser(description="MoE-PEFT main program")
-parser.add_argument(
-    "--base_model", type=str, required=True, help="Path to or name of base model"
-)
-parser.add_argument(
-    "--inference", action="store_true", help="The inference mode (just for test)"
-)
-parser.add_argument(
-    "--evaluate", action="store_true", help="The evaluate mode (just for test)"
-)
-parser.add_argument(
-    "--disable_prompter", action="store_true", help="Disable prompter when inference"
-)
-parser.add_argument(
-    "--load_adapter",
-    action="store_true",
-    help="Load adapter from file instead of init randomly",
-)
-parser.add_argument(
-    "--disable_adapter", action="store_true", help="Disable the adapter modules"
-)
-parser.add_argument(
-    "--attn_impl", type=str, help="Specify the implementation of attention"
-)
-parser.add_argument(
-    "--sliding_window",
-    action="store_true",
-    help="Use sliding window attention (requires flash attention)",
-)
-parser.add_argument(
-    "--disable_cache",
-    action="store_true",
-    help="Disable cache when inference",
-)
-parser.add_argument(
-    "--cache_implementation",
-    type=str,
-    help="Specify the implementation of cache",
-)
-parser.add_argument(
-    "--fp16", action="store_true", help="Load base model in float16 precision"
-)
-parser.add_argument(
-    "--bf16", action="store_true", help="Load base model in bfloat16 precision"
-)
-parser.add_argument(
-    "--tf32", action="store_true", help="Use tfloat32 instead of float32 if available"
-)
-parser.add_argument(
-    "--load_8bit", action="store_true", help="Load base model with 8bit quantization"
-)
-parser.add_argument(
-    "--load_4bit", action="store_true", help="Load base model with 4bit quantization"
-)
-parser.add_argument("--device", type=str, help="Specify which GPU to be used")
-parser.add_argument(
-    "--config", type=str, required=True, help="Path to finetune configuration"
-)
-parser.add_argument(
-    "--seed", type=int, default=42, help="Random seed in integer, default is 42"
-)
-parser.add_argument(
-    "--dir", type=str, default=".", help="Path to read or save checkpoints"
-)
-parser.add_argument("--disable_log", action="store_true", help="Disable logging")
-parser.add_argument("--log_file", type=str, help="Save log to specific file")
-parser.add_argument(
-    "--verbose", action="store_true", help="Show extra informations such as parameters"
-)
-parser.add_argument(
-    "--overwrite",
-    action="store_true",
-    help="Overwrite adapter model when older one existed",
-)
-parser.add_argument("--debug", action="store_true", help="Enabling debugging mode")
-parser.add_argument(
-    "--deterministic",
-    action="store_true",
-    help="Use deterministic algorithms to improve the reproducibility",
-)
 
-args = parser.parse_args()
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="MoE-PEFT main program")
+    parser.add_argument(
+        "--base_model", type=str, required=True, help="Path to or name of base model"
+    )
+    parser.add_argument(
+        "--inference", action="store_true", help="The inference mode (just for test)"
+    )
+    parser.add_argument(
+        "--evaluate", action="store_true", help="The evaluate mode (just for test)"
+    )
+    parser.add_argument(
+        "--disable_prompter",
+        action="store_true",
+        help="Disable prompter when inference",
+    )
+    parser.add_argument(
+        "--load_adapter",
+        action="store_true",
+        help="Load adapter from file instead of init randomly",
+    )
+    parser.add_argument(
+        "--disable_adapter", action="store_true", help="Disable the adapter modules"
+    )
+    parser.add_argument(
+        "--attn_impl", type=str, help="Specify the implementation of attention"
+    )
+    parser.add_argument(
+        "--sliding_window",
+        action="store_true",
+        help="Use sliding window attention (requires flash attention)",
+    )
+    parser.add_argument(
+        "--disable_cache",
+        action="store_true",
+        help="Disable cache when inference",
+    )
+    parser.add_argument(
+        "--cache_implementation",
+        type=str,
+        help="Specify the implementation of cache",
+    )
+    parser.add_argument(
+        "--fp16", action="store_true", help="Load base model in float16 precision"
+    )
+    parser.add_argument(
+        "--bf16", action="store_true", help="Load base model in bfloat16 precision"
+    )
+    parser.add_argument(
+        "--tf32",
+        action="store_true",
+        help="Use tfloat32 instead of float32 if available",
+    )
+    parser.add_argument(
+        "--load_8bit",
+        action="store_true",
+        help="Load base model with 8bit quantization",
+    )
+    parser.add_argument(
+        "--load_4bit",
+        action="store_true",
+        help="Load base model with 4bit quantization",
+    )
+    parser.add_argument("--device", type=str, help="Specify which GPU to be used")
+    parser.add_argument(
+        "--config", type=str, required=True, help="Path to finetune configuration"
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Random seed in integer, default is 42"
+    )
+    parser.add_argument(
+        "--dir", type=str, default=".", help="Path to read or save checkpoints"
+    )
+    parser.add_argument("--disable_log", action="store_true", help="Disable logging")
+    parser.add_argument("--log_file", type=str, help="Save log to specific file")
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show extra informations such as parameters",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite adapter model when older one existed",
+    )
+    parser.add_argument("--debug", action="store_true", help="Enabling debugging mode")
+    parser.add_argument(
+        "--deterministic",
+        action="store_true",
+        help="Use deterministic algorithms to improve the reproducibility",
+    )
+    return parser
 
 
 def query_yes_no(question, default="no"):
@@ -118,9 +134,9 @@ def query_yes_no(question, default="no"):
             sys.stdout.write("Please respond with 'yes' or 'no' " "(or 'y' or 'n').\n")
 
 
-def load_base_model() -> Tuple[moe_peft.Tokenizer, moe_peft.LLMModel]:
+def load_base_model(args) -> Tuple[Tokenizer, LLMModel]:
     logging.info("Initializing pre-trained model.")
-    model = moe_peft.LLMModel.from_pretrained(
+    model = LLMModel.from_pretrained(
         name_or_path=args.base_model,
         device=args.device,
         attn_impl=args.attn_impl,
@@ -133,15 +149,16 @@ def load_base_model() -> Tuple[moe_peft.Tokenizer, moe_peft.LLMModel]:
         ),
     )
 
-    tokenizer = moe_peft.Tokenizer(args.base_model)
+    tokenizer = Tokenizer(args.base_model)
 
     return tokenizer, model
 
 
 def init_adapter_config(
+    args,
     config: Dict[str, any],
-    llm_model: moe_peft.LLMModel,
-) -> List[Union[moe_peft.GenerateConfig, moe_peft.TrainConfig]]:
+    llm_model: LLMModel,
+) -> List[Union[GenerateConfig, TrainConfig]]:
     config_list = []
 
     if config["cutoff_len"] == -1:
@@ -167,17 +184,17 @@ def init_adapter_config(
         if args.load_adapter:
             llm_model.load_adapter(adapter_path, adapter_name)
         else:
-            llm_model.init_adapter(moe_peft.adapters.lora_config_factory(lora_config))
+            llm_model.init_adapter(lora_config_factory(lora_config))
 
         if args.inference:
-            config_class = moe_peft.GenerateConfig(adapter_name=adapter_name)
+            config_class = GenerateConfig(adapter_name=adapter_name)
             if not args.disable_prompter:
                 config_class.prompt_template = lora_config.get("prompt", None)
             config_list.append(config_class)
         elif args.evaluate:
-            config_list.extend(moe_peft.EvaluateConfig.from_config(lora_config))
+            config_list.extend(EvaluateConfig.from_config(lora_config))
         else:
-            config_list.append(moe_peft.TrainConfig.from_config(lora_config))
+            config_list.append(TrainConfig.from_config(lora_config))
 
         if args.verbose:
             logging.info(config_list[-1].__dict__)
@@ -191,10 +208,11 @@ def inference_callback(cur_pos, outputs):
         print(f"{adapter_name} OUTPUT: {output[0]}")
 
 
-def inference(
-    model: moe_peft.LLMModel,
-    tokenizer: moe_peft.Tokenizer,
-    configs: List[moe_peft.GenerateConfig],
+def run_inference(
+    args,
+    model: LLMModel,
+    tokenizer: Tokenizer,
+    configs: List[GenerateConfig],
     concurrent_jobs: int,
 ):
     while True:
@@ -204,7 +222,7 @@ def inference(
         for config in configs:
             config.prompts = [input_raw]
         callback = None if args.disable_log else inference_callback
-        outputs = moe_peft.generate(
+        outputs = generate(
             model,
             tokenizer,
             configs,
@@ -222,8 +240,10 @@ def inference(
         print(f"\n{'=' * 10}\n")
 
 
-# Main Function
-if __name__ == "__main__":
+def main(argv: List[str] | None = None) -> int:
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+
     if args.debug:
         torch.autograd.set_detect_anomaly(True)
 
@@ -233,12 +253,10 @@ if __name__ == "__main__":
     else:
         inference_mode = False
 
-    moe_peft.setup_logging("INFO", args.log_file)
-
-    moe_peft_executor = moe_peft.executor
+    setup_logging("INFO", args.log_file)
 
     if not moe_peft_executor.check_available():
-        exit(-1)
+        return -1
 
     if args.attn_impl is None:
         if (
@@ -251,7 +269,7 @@ if __name__ == "__main__":
             args.attn_impl = "eager"
 
     if args.device is None:
-        args.device = moe_peft.executor.default_device_name()
+        args.device = moe_peft_executor.default_device_name()
 
     moe_peft_executor.use_deterministic_algorithms(args.deterministic)
     moe_peft_executor.allow_tf32(args.tf32)
@@ -260,8 +278,8 @@ if __name__ == "__main__":
     with open(args.config, "r", encoding="utf8") as fp:
         config = json.load(fp)
 
-    tokenizer, model = load_base_model()
-    adapters = init_adapter_config(config, model)
+    tokenizer, model = load_base_model(args)
+    adapters = init_adapter_config(args, config, model)
 
     moe_peft_executor.empty_cache()
 
@@ -271,14 +289,15 @@ if __name__ == "__main__":
         logging.info("Using deterministic operators.")
 
     if args.inference:
-        inference(
+        run_inference(
+            args=args,
             model=model,
             tokenizer=tokenizer,
             configs=adapters,
             concurrent_jobs=config.get("inference_lora_simultaneously_num", 2),
         )
     elif args.evaluate:
-        moe_peft.evaluate(
+        evaluate(
             model=model,
             tokenizer=tokenizer,
             configs=adapters,
@@ -288,7 +307,7 @@ if __name__ == "__main__":
             save_file=config.get("evaluate_result", None),
         )
     else:
-        moe_peft.train(
+        train(
             model=model,
             tokenizer=tokenizer,
             configs=adapters,
@@ -298,3 +317,9 @@ if __name__ == "__main__":
             save_step=config["save_step"],
             save_dir=args.dir,
         )
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

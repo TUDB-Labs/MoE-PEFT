@@ -83,7 +83,6 @@ g_max_range = 128
 
 
 def get_range_tensor(device: torch.device, batch_size: int = 1024):
-    global g_cached_range_tensor
     global g_max_range
     if device not in g_cached_range_tensor or batch_size > g_max_range:
         g_max_range = g_max_range if g_max_range > batch_size else batch_size

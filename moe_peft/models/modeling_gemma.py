@@ -6,9 +6,7 @@ from transformers.models.gemma import modeling_gemma
 from moe_peft.common import FeedForward
 from moe_peft.executors import executor
 from moe_peft.models.modeling_llama import (
-    LLAMA_ATTENTION_CLASSES as GEMMA_ATTENTION_CLASSES,
-)
-from moe_peft.models.modeling_llama import (
+    LlamaAttention,
     LlamaConfig,
     LlamaDecoderLayer,
     LlamaForCausalLM,
@@ -104,7 +102,7 @@ class GemmaForCausalLM(LlamaForCausalLM):
 
         for idx, layer in enumerate(llm_model.model.layers):
             decoder = LlamaDecoderLayer(idx)
-            decoder.self_attn_ = GEMMA_ATTENTION_CLASSES[llm_args.attn_implementation_](
+            decoder.self_attn_ = LlamaAttention(
                 layer.self_attn.q_proj,
                 layer.self_attn.k_proj,
                 layer.self_attn.v_proj,

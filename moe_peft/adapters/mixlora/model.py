@@ -4,7 +4,14 @@ import torch
 import torch.nn.functional as F
 from transformers.activations import ACT2FN
 
-from moe_peft.common import LLMFeedForward, LLMModelInput, LLMMoeBlock, slice_tensor
+from moe_peft.common import (
+    LLMFeedForward,
+    LLMModelInput,
+    LLMMoeBlock,
+    renyi_entropy,
+    slice_tensor,
+    tsallis_entropy,
+)
 
 from .config import MixLoraConfig
 
@@ -31,15 +38,37 @@ def _mixlora_compatible_forward(
 
 def _mixtral_load_balancing_loss_func(
     gate_logits: torch.Tensor,
-    num_experts: int,
-    top_k: int,
+    adapter_config: MixLoraConfig,
     attention_mask: Optional[torch.Tensor] = None,
 ) -> float:
     routing_weights = torch.nn.functional.softmax(gate_logits, dim=-1)
 
-    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+    # Entropy Loss
+    if adapter_config.entropy_type_ == "tsallis":
+        router_entropy = tsallis_entropy(
+            p=routing_weights,
+            q=adapter_config.entropy_index_,
+            normalize=True,
+        )
+    elif adapter_config.entropy_type_ == "renyi":
+        router_entropy = renyi_entropy(
+            p=routing_weights,
+            a=adapter_config.entropy_index_,
+            normalize=True,
+        )
+    else:
+        raise NotImplementedError(
+            f"Unsupported entropy_type_: {adapter_config.entropy_type_}. Must be either 'tsallis' or 'renyi'."
+        )
 
-    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+    entropy_loss = router_entropy.mean()
+
+    # Load Balance Loss
+    _, selected_experts = torch.topk(routing_weights, adapter_config.top_k_, dim=-1)
+
+    expert_mask = torch.nn.functional.one_hot(
+        selected_experts, adapter_config.num_experts_
+    )
 
     if attention_mask is None:
         # Compute the percentage of tokens routed to each experts
@@ -55,9 +84,15 @@ def _mixtral_load_balancing_loss_func(
         expert_attention_mask = (
             attention_mask[None, :, :, None, None]
             .expand(
-                (num_hidden_layers, batch_size, sequence_length, top_k, num_experts)
+                (
+                    num_hidden_layers,
+                    batch_size,
+                    sequence_length,
+                    adapter_config.top_k_,
+                    adapter_config.num_experts_,
+                )
             )
-            .reshape(-1, top_k, num_experts)
+            .reshape(-1, adapter_config.top_k_, adapter_config.num_experts_)
             .to(routing_weights.device)
         )
 
@@ -69,30 +104,43 @@ def _mixtral_load_balancing_loss_func(
         # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
         router_per_expert_attention_mask = (
             attention_mask[None, :, :, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-            .reshape(-1, num_experts)
+            .expand(
+                (
+                    num_hidden_layers,
+                    batch_size,
+                    sequence_length,
+                    adapter_config.num_experts_,
+                )
+            )
+            .reshape(-1, adapter_config.num_experts_)
             .to(routing_weights.device)
         )
 
         # Compute the average probability of routing to these experts
+        # Add epsilon to denominator to prevent division by zero
         router_prob_per_expert = torch.sum(
             routing_weights * router_per_expert_attention_mask, dim=0
-        ) / torch.sum(router_per_expert_attention_mask, dim=0)
+        ) / (torch.sum(router_per_expert_attention_mask, dim=0) + 1e-10)
 
-    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
-    return overall_loss * num_experts
+    load_balance_loss = (
+        torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+        * adapter_config.num_experts_
+    )
+
+    return (
+        adapter_config.router_dyn_loss_coef_ * entropy_loss
+        + adapter_config.router_aux_loss_coef_ * load_balance_loss
+    )
 
 
 class MixtralRouterLoss(torch.nn.Module):
     def __init__(self, config: MixLoraConfig) -> None:
         super().__init__()
-        self.aux_loss_coef = config.router_aux_loss_coef_
-        self.experts = config.num_experts_
-        self.topk = config.top_k_
+        self.adapter_config = config
 
     def forward(self, gate_logits, attention_mask) -> torch.Tensor:
-        return self.aux_loss_coef * _mixtral_load_balancing_loss_func(
-            gate_logits, self.experts, self.topk, attention_mask
+        return _mixtral_load_balancing_loss_func(
+            gate_logits, self.adapter_config, attention_mask
         )
 
 

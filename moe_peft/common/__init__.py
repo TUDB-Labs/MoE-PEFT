@@ -9,6 +9,7 @@ from .abstracts import (
     LLMOutput,
 )
 from .attention import (
+    ATTENTION_FUNCTIONS,
     eager_attention_forward,
     flash_attention_forward,
     prepare_4d_causal_attention_mask,
@@ -47,13 +48,21 @@ from .feed_forward import FeedForward
 from .lora_linear import Linear, Lora, get_range_tensor
 
 # MoEs
-from .moe_utils import collect_plugin_router_logtis, slice_tensor, unpack_router_logits
+from .moe_utils import (
+    collect_plugin_router_logtis,
+    renyi_entropy,
+    shannon_entropy,
+    slice_tensor,
+    tsallis_entropy,
+    unpack_router_logits,
+)
 from .rope import ROPE_INIT_FUNCTIONS
 
 __all__ = [
     "prepare_4d_causal_attention_mask",
     "eager_attention_forward",
     "flash_attention_forward",
+    "ATTENTION_FUNCTIONS",
     "LLMCache",
     "DynamicCache",
     "HybridCache",
@@ -65,6 +74,9 @@ __all__ = [
     "CheckpointRecomputeFunction",
     "CHECKPOINT_CLASSES",
     "FeedForward",
+    "tsallis_entropy",
+    "shannon_entropy",
+    "renyi_entropy",
     "slice_tensor",
     "unpack_router_logits",
     "collect_plugin_router_logtis",

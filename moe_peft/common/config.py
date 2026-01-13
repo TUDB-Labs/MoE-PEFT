@@ -78,6 +78,7 @@ class LLMModelInput:
     batch_tokens_: List[Tokens] = None
     batch_labels_: List[Labels] = None
     batch_masks_: List[Masks] = None
+    cache_position_: Optional[torch.Tensor] = None
 
     output_router_logits_: bool = True
 
@@ -89,7 +90,7 @@ class LLMModelInput:
 @dataclass
 class AdapterConfig:
     adapter_name: str = ""
-    task_name: str = "casual"
+    task_name: str = "causal"
 
     @staticmethod
     def from_config(config: Dict[str, any]) -> "AdapterConfig":

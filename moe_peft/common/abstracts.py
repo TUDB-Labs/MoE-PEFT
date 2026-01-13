@@ -26,14 +26,17 @@ class LLMCache(torch.nn.Module):
         )
 
     def get_max_length(self) -> Optional[int]:
+        return self.get_max_cache_shape()
+
+    def get_max_cache_shape(self) -> Optional[int]:
         raise NotImplementedError(
-            "Make sure to implement `get_max_length` in a subclass."
+            "Make sure to implement `get_max_cache_shape` in a subclass."
         )
 
     def get_usable_length(
         self, new_seq_length: int, layer_idx: Optional[int] = 0
     ) -> int:
-        max_length = self.get_max_length()
+        max_length = self.get_max_cache_shape()
         previous_seq_length = self.get_seq_length(layer_idx)
         if max_length is not None and previous_seq_length + new_seq_length > max_length:
             return max_length - new_seq_length
@@ -41,14 +44,56 @@ class LLMCache(torch.nn.Module):
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         for layer_idx in range(len(self.key_cache)):
-            device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(
-                0, beam_idx.to(device)
+            # Skip empty lists (used by DynamicCache for skipped layers)
+            key_cache_item = self.key_cache[layer_idx]
+            is_empty_list = (
+                isinstance(key_cache_item, list) and len(key_cache_item) == 0
             )
-            device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(
-                0, beam_idx.to(device)
+            if not is_empty_list:
+                device = key_cache_item.device
+                self.key_cache[layer_idx] = key_cache_item.index_select(
+                    0, beam_idx.to(device)
+                )
+
+            value_cache_item = self.value_cache[layer_idx]
+            is_empty_list = (
+                isinstance(value_cache_item, list) and len(value_cache_item) == 0
             )
+            if not is_empty_list:
+                device = value_cache_item.device
+                self.value_cache[layer_idx] = value_cache_item.index_select(
+                    0, beam_idx.to(device)
+                )
+
+    def select_batch(self, batch_idx: torch.LongTensor):
+        """
+        Select a subset of the batch dimension across all cache layers.
+        This mirrors `reorder_cache` behavior but is intended for batch filtering
+        (e.g., top-k selection in generation). Layers with empty lists are skipped.
+
+        Note: For static or sliding-window caches, this replaces the cached tensor
+        reference for the layer with an indexed view, consistent with `reorder_cache`.
+        """
+        for layer_idx in range(len(self.key_cache)):
+            key_cache_item = self.key_cache[layer_idx]
+            is_empty_list = (
+                isinstance(key_cache_item, list) and len(key_cache_item) == 0
+            )
+            if not is_empty_list:
+                device = key_cache_item.device
+                self.key_cache[layer_idx] = key_cache_item.index_select(
+                    0, batch_idx.to(device)
+                )
+
+            value_cache_item = self.value_cache[layer_idx]
+            is_empty_list = (
+                isinstance(value_cache_item, list) and len(value_cache_item) == 0
+            )
+            if not is_empty_list:
+                device = value_cache_item.device
+                self.value_cache[layer_idx] = value_cache_item.index_select(
+                    0, batch_idx.to(device)
+                )
 
 
 class LLMAttention(metaclass=ABCMeta):

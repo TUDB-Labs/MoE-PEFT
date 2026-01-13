@@ -8,9 +8,7 @@ from .common import Masks, Tokens
 
 class Tokenizer:
     def __init__(self, model_path: str):
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            model_path, trust_remote_code=True
-        )
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self.vocab_size_ = self.tokenizer.vocab_size
         self.padding_side_ = self.tokenizer.padding_side
         self.bos_id_ = self.tokenizer.bos_token_id

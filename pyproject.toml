@@ -4,25 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "moe_peft"
-version = "2.0.2"
+version = "2.1.0"
 description = "An Efficient LLM Fine-Tuning Factory Optimized for MoE PEFT"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "torch>=2.4.0,<2.6.0",
+    "torch==2.9.1",
     "datasets",
     "evaluate",
-    "accelerate",
-    "transformers>=4.44.0,<4.47.0",
+    "transformers==4.57.3",
     "sentencepiece",
     "huggingface_hub",
-    "scikit-learn",
-    "tiktoken",
+    "packaging",
 ]
 
 [project.urls]

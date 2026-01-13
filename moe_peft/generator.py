@@ -100,18 +100,21 @@ def logits_process(
     repetition_penalty=1.1,
     renormalize_logits=True,
 ):
-    process_conditions = any([repetition_penalty > 0])
+    process_conditions = repetition_penalty > 0 and repetition_penalty != 1.0
     sample_conditions = any([temperature > 0, top_p > 0 and top_p <= 1.0, top_k > 0])
 
-    if not do_sample and sample_conditions:
-        do_sample = True
-        logging.warn("do_sample force to enabled.")
+    # Greedy path
+    if not do_sample:
+        if process_conditions:
+            probs = _logits_repetition_penalty(prev_tokens, probs, repetition_penalty)
+        return torch.argmax(probs, dim=-1).reshape(-1)
 
-    if repetition_penalty > 0:
-        probs = _logits_repetition_penalty(prev_tokens, probs, repetition_penalty)
-
+    # Sampling path
     if process_conditions and renormalize_logits:
         probs = probs.log_softmax(-1)
+
+    if process_conditions:
+        probs = _logits_repetition_penalty(prev_tokens, probs, repetition_penalty)
 
     if temperature > 0:
         probs = probs / temperature
@@ -125,11 +128,8 @@ def logits_process(
     if sample_conditions and renormalize_logits:
         probs = probs.log_softmax(-1)
 
-    if do_sample:
-        probs = torch.softmax(probs, dim=-1)
-        next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
-    else:
-        next_token = torch.argmax(probs, dim=-1)
+    probs = torch.softmax(probs, dim=-1)
+    next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
 
     return next_token.reshape(-1)
 
@@ -322,9 +322,20 @@ def _batch_generate(
     stop_reached = torch.tensor([False] * batch_size, device=device)
     input_text_mask = tokens != tokenizer.pad_id_
     for cur_pos in range(min_tokens_len, total_len):
+        attn_mask = (tokens[:, prev_pos:cur_pos] != tokenizer.pad_id_).int().tolist()
+        # Absolute positions for this chunk, used by RoPE/static caches
+        cache_position = torch.arange(
+            prev_pos,
+            cur_pos,
+            device=device,
+            dtype=torch.long,
+        )
+
         input_data = LLMModelInput(
             batch_configs_=batch_config,
             batch_tokens_=tokens[:, prev_pos:cur_pos].tolist(),
+            batch_masks_=attn_mask,
+            cache_position_=cache_position,
             inference_mode_=True,
         )
         outputs = model.forward(input_data, past_key_values)

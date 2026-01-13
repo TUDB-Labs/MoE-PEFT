@@ -37,7 +37,7 @@ You can use the `MOE_PEFT_EXECUTOR_TYPE` environment variable to force MoE-PEFT 
 | &check; | [LLaMA 3.x](https://huggingface.co/meta-llama)   | 3B/8B/70B   |
 | &check; | [Yi 1/1.5](https://huggingface.co/01-ai)         | 6B/9B/34B   |
 | &check; | [TinyLLaMA](https://huggingface.co/TinyLlama)    | 1.1B        |
-| &check; | [Qwen 1.5/2.x](https://huggingface.co/Qwen)      | 0.5B ~ 72B  |
+| &check; | [Qwen 1.5/2/3](https://huggingface.co/Qwen)      | 0.5B ~ 72B  |
 | &check; | [Gemma](https://huggingface.co/google)           | 2B/7B       |
 | &check; | [Gemma 2](https://huggingface.co/google)         | 9B/27B      |
 | &check; | [Mistral](https://huggingface.co/mistralai)      | 7B          |
@@ -75,7 +75,7 @@ You can use the `MOE_PEFT_EXECUTOR_TYPE` environment variable to force MoE-PEFT 
 | &check; | [Flash Attention 2](https://arxiv.org/abs/2307.08691)        | `"flash_attn"` | `--attn_impl flash_attn` |
 | &check; | [Sliding Window Attention](https://arxiv.org/abs/2004.05150) | -              | `--sliding_window`       |
 
-*: Arguments of `moe_peft.py`
+*: Arguments of `python -m moe_peft`
 
 MoE-PEFT only supports scaled-dot product attention (eager) by default. Additional requirements are necessary for flash attention.
 
@@ -83,7 +83,7 @@ For flash attention, manual installation of the following dependencies is requir
 
 ```bash
 pip3 install ninja
-pip3 install flash-attn==2.5.8 --no-build-isolation
+pip3 install flash-attn==2.8.3 --no-build-isolation
 ```
 
 If any attention method is not specified, flash attention is used if available.
@@ -99,7 +99,7 @@ If any attention method is not specified, flash attention is used if available.
 | &check; | 8bit Quantize         | `--load_8bit` |
 | &check; | 4bit Quantize         | `--load_4bit` |
 
-*: Arguments of `moe_peft.py`
+*: Arguments of `python -m moe_peft`
 
 MoE-PEFT offers support for various model accuracy and quantization methods. By default, MoE-PEFT utilizes full precision (Float32), but users can opt for half precision (Float16) using `--fp16` or BrainFloat16 using `--bf16`. Enabling half precision reduces the model size by half, and for further reduction, quantization methods can be employed.
 
@@ -131,7 +131,6 @@ Example of (4): `export MOE_PEFT_METRIC_PATH=/path-to-your-git-repo/evaluate/met
 
  + Quantization with Qwen2 have no effect (same with transformers).
  + Applying quantization with DoRA will result in higher memory and computation cost (same with PEFT).
- + Sliding window attention with generate cache may product abnormal output.
 
 ## Installation
 
@@ -152,7 +151,7 @@ python launch.py run --base_model TinyLlama/TinyLlama_v1.1
 python inference.py \
   --base_model TinyLlama/TinyLlama_v1.1 \
   --template alpaca \
-  --lora_weights ./casual_0
+  --lora_weights ./causal_0
 ```
 
 For further detailed usage information, please refer to the `help` command:
@@ -163,7 +162,7 @@ python launch.py help
 
 ## MoE-PEFT
 
-The `moe_peft.py` code is a starting point for finetuning on various datasets.
+You can run MoE-PEFT via the module entrypoint `python -m moe_peft` for finetuning on various datasets.
 
 Basic command for finetuning a baseline model on the [Alpaca Cleaned](https://github.com/gururise/AlpacaDataCleaned) dataset:
 ```bash
@@ -172,7 +171,7 @@ python launch.py gen \
   --template lora \
   --tasks yahma/alpaca-cleaned
 
-python moe_peft.py \
+python -m moe_peft \
   --base_model meta-llama/Llama-2-7b-hf \
   --config moe_peft.json \
   --bf16
@@ -182,7 +181,7 @@ You can check the template finetune configuration in [templates](./templates/) f
 
 For further detailed usage information, please use `--help` option:
 ```bash
-python moe_peft.py --help
+python -m moe_peft --help
 ```
 
 ## Use Docker

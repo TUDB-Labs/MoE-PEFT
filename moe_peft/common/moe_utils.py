@@ -6,6 +6,46 @@ import torch
 from .abstracts import LLMDecoder, LLMModelInput
 
 
+@torch.jit.script
+def tsallis_entropy(p: torch.Tensor, q: float, normalize: bool = True) -> torch.Tensor:
+    N = p.size(dim=-1)
+    if q == 1.0:
+        ent_terms = torch.where(p > 0, p * torch.log(p), torch.zeros_like(p))
+        entropy = -torch.sum(ent_terms, dim=-1)
+        max_entropy = torch.log(torch.tensor(N, dtype=p.dtype, device=p.device))
+    else:
+        entropy = (1 - torch.sum(p**q, dim=-1)) / (q - 1)
+        max_entropy = torch.tensor(
+            (1 - N ** (1 - q)) / (q - 1), dtype=p.dtype, device=p.device
+        )
+
+    if normalize:
+        return entropy / max_entropy
+    else:
+        return entropy
+
+
+def shannon_entropy(p: torch.Tensor, normalize: bool = True) -> torch.Tensor:
+    return tsallis_entropy(p, 1.0, normalize)
+
+
+@torch.jit.script
+def renyi_entropy(p: torch.Tensor, a: float, normalize: bool = True) -> torch.Tensor:
+    N = p.size(dim=-1)
+    if a == 1.0:
+        ent_terms = torch.where(p > 0, p * torch.log(p), torch.zeros_like(p))
+        entropy = -torch.sum(ent_terms, dim=-1)
+    else:
+        sum_pa = torch.sum(p**a, dim=-1)
+        entropy = 1 / (1 - a) * torch.log(sum_pa)
+
+    max_entropy = torch.log(torch.tensor(N, dtype=p.dtype, device=p.device))
+    if normalize:
+        return entropy / max_entropy
+    else:
+        return entropy
+
+
 def slice_tensor(
     data: torch.Tensor,
     slice: torch.Tensor,

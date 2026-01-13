@@ -1,0 +1,114 @@
+import os
+import sys
+
+import pytest
+import torch
+
+# Ensure repo root is used for in-repo imports
+REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+from transformers.models.llama import (  # type: ignore  # noqa: E402
+    modeling_llama as hf_llama,
+)
+from transformers.models.qwen2 import (  # type: ignore  # noqa: E402
+    modeling_qwen2 as hf_qwen2,
+)
+
+from moe_peft.common import AdapterConfig, LLMBatchConfig, LLMModelInput  # noqa: E402
+from moe_peft.model import LLMModel  # noqa: E402
+from moe_peft.models.modeling_llama import LlamaForCausalLM as MoeLlama  # noqa: E402
+from moe_peft.models.modeling_qwen import QwenForCausalLM as MoeQwen  # noqa: E402
+
+
+def build_batch(adapter_name: str, seq_len: int = 16):
+    tokens = torch.randint(1, 100, (1, seq_len), dtype=torch.long).tolist()
+    masks = torch.ones((1, seq_len), dtype=torch.long).tolist()
+
+    batch_cfg = LLMBatchConfig(
+        adapter_name_=adapter_name,
+        batch_start_idx_=0,
+        batch_end_idx_=1,
+    )
+
+    return LLMModelInput(
+        batch_configs_=[batch_cfg],
+        batch_tokens_=tokens,
+        batch_labels_=tokens,  # use next-token prediction to validate loss path
+        batch_masks_=masks,
+        output_router_logits_=False,
+        gradient_checkpoint_="none",
+        inference_mode_=False,
+    )
+
+
+@pytest.mark.parametrize("dtype", [torch.float32])
+def test_llama_alignment_minimal_forward(dtype):
+    cfg = hf_llama.LlamaConfig(
+        vocab_size=128,
+        hidden_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=8,
+        num_key_value_heads=8,
+        intermediate_size=172,
+        max_position_embeddings=128,
+        rms_norm_eps=1e-6,
+        pad_token_id=0,
+        rope_theta=10000.0,
+    )
+    hf_model = hf_llama.LlamaForCausalLM(cfg).to(dtype)
+
+    moe = MoeLlama.from_pretrained(
+        hf_model, attn_impl="eager", use_sliding_window=False, device="cpu"
+    )
+    model = LLMModel(moe)
+
+    # initialize a base adapter for logits head
+    model.init_adapter(AdapterConfig(adapter_name="base", task_name="causal"))
+
+    batch = build_batch("base", seq_len=12)
+    outputs = model(batch)
+
+    assert isinstance(outputs, list) and len(outputs) == 1
+    out = outputs[0]
+    assert out.logits.shape[:2] == (1, 12)
+    assert out.logits.shape[2] == cfg.vocab_size
+    assert out.loss is not None and torch.isfinite(out.loss).item()
+
+
+@pytest.mark.parametrize("dtype", [torch.float32])
+def test_qwen2_alignment_minimal_forward(dtype):
+    # Qwen2 config with sliding window
+    cfg = hf_qwen2.Qwen2Config(
+        vocab_size=128,
+        hidden_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=8,
+        num_key_value_heads=8,
+        intermediate_size=172,
+        max_position_embeddings=128,
+        rms_norm_eps=1e-6,
+        pad_token_id=0,
+        rope_theta=10000.0,
+        sliding_window=64,
+        use_sliding_window=True,
+        max_window_layers=1,
+    )
+    hf_model = hf_qwen2.Qwen2ForCausalLM(cfg).to(dtype)
+
+    moe = MoeQwen.from_pretrained(
+        hf_model, attn_impl="eager", use_sliding_window=False, device="cpu"
+    )
+    model = LLMModel(moe)
+
+    model.init_adapter(AdapterConfig(adapter_name="base", task_name="causal"))
+
+    batch = build_batch("base", seq_len=12)
+    outputs = model(batch)
+
+    assert isinstance(outputs, list) and len(outputs) == 1
+    out = outputs[0]
+    assert out.logits.shape[:2] == (1, 12)
+    assert out.logits.shape[2] == cfg.vocab_size
+    assert out.loss is not None and torch.isfinite(out.loss).item()

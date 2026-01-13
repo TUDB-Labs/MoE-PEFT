@@ -1,15 +1,15 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers.activations import ACT2FN
 from transformers.models.llama import modeling_llama
-from transformers.models.llama.modeling_llama import apply_rotary_pos_emb, repeat_kv
-from transformers.utils import is_flash_attn_2_available
+from transformers.models.llama.modeling_llama import apply_rotary_pos_emb
 
 from moe_peft.common import (
+    ATTENTION_FUNCTIONS,
     ROPE_INIT_FUNCTIONS,
     FeedForward,
     Linear,
@@ -21,8 +21,6 @@ from moe_peft.common import (
     LLMModelConfig,
     LLMModelInput,
     collect_plugin_router_logtis,
-    eager_attention_forward,
-    flash_attention_forward,
     prepare_4d_causal_attention_mask,
     slice_tensor,
 )
@@ -134,30 +132,34 @@ class LlamaAttention(LLMAttention):
         wv: nn.Module,
         wo: nn.Module,
         idx: int,
-        args: LlamaConfig,
+        config: LlamaConfig,
     ):
         super().__init__()
         # attention
-        self.wq_: Linear = Linear(wq, args.device_)  # dim * dim
-        self.wk_: Linear = Linear(wk, args.device_)  # dim * dim
-        self.wv_: Linear = Linear(wv, args.device_)  # dim * dim
-        self.wo_: Linear = Linear(wo, args.device_)  # dim * dim
+        self.q_proj_: Linear = Linear(wq, config.device_)  # dim * dim
+        self.k_proj_: Linear = Linear(wk, config.device_)  # dim * dim
+        self.v_proj_: Linear = Linear(wv, config.device_)  # dim * dim
+        self.o_proj_: Linear = Linear(wo, config.device_)  # dim * dim
         # config
         self.layer_idx_ = idx
-        self.dim_ = args.dim_
-        self.n_heads_ = args.n_heads_
-        self.n_kv_heads_ = args.n_kv_heads_
-        self.n_rep_ = self.n_heads_ // self.n_kv_heads_
-        self.head_dim_ = args.head_dim_
-        self.dtype_ = args.dtype_
+        self.config_ = config
+        self.dim_ = config.dim_
+        self.n_heads_ = config.n_heads_
+        self.n_kv_heads_ = config.n_kv_heads_
+        self.head_dim_ = config.head_dim_
+        self.dtype_ = config.dtype_
+        self.scaling_ = self.head_dim_**-0.5
         self.is_causal_ = True
+        self.attention_interface_: Callable = ATTENTION_FUNCTIONS[
+            config.attn_implementation_
+        ]
 
     def state_dict(self) -> Dict[str, Linear]:
         return {
-            "q_proj": self.wq_,
-            "k_proj": self.wk_,
-            "v_proj": self.wv_,
-            "o_proj": self.wo_,
+            "q_proj": self.q_proj_,
+            "k_proj": self.k_proj_,
+            "v_proj": self.v_proj_,
+            "o_proj": self.o_proj_,
         }
 
     def forward(
@@ -171,9 +173,9 @@ class LlamaAttention(LLMAttention):
     ):
         batch_size, max_seq_len, _ = hidden_states.shape
 
-        xq = self.wq_.forward(hidden_states, input_args)
-        xk = self.wk_.forward(hidden_states, input_args)
-        xv = self.wv_.forward(hidden_states, input_args)
+        xq = self.q_proj_.forward(hidden_states, input_args)
+        xk = self.k_proj_.forward(hidden_states, input_args)
+        xv = self.v_proj_.forward(hidden_states, input_args)
 
         # conver shape to multi head
         xq = xq.view(batch_size, max_seq_len, self.n_heads_, self.head_dim_).transpose(
@@ -197,104 +199,34 @@ class LlamaAttention(LLMAttention):
                 "cache_position": cache_position,
             }
             xk, xv = past_key_value.update(xk, xv, self.layer_idx_, cache_kwargs)
-
-        # for llama2 need to repeat the heads
-        # before dim: batch_size, n_kv_head, seq_len, head_dim
-        # after dim: batch_size, n_head, seq_len, head_dim
-        xk = repeat_kv(xk, self.n_rep_)
-        xv = repeat_kv(xv, self.n_rep_)
-
-        attention_score = eager_attention_forward(xq, xk, xv, attention_mask)
-        attention_score = attention_score.reshape(batch_size, max_seq_len, -1)
-
-        # get output attention score
-        return self.wo_.forward(attention_score, input_args)
-
-
-class LlamaFlashAttention(LlamaAttention):
-    def __init__(
-        self,
-        wq: nn.Module,
-        wk: nn.Module,
-        wv: nn.Module,
-        wo: nn.Module,
-        idx: int,
-        args: LlamaConfig,
-    ):
-        assert is_flash_attn_2_available(), "Flash Attention is not available"
-        super().__init__(wq, wk, wv, wo, idx, args)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        input_args: LLMModelInput,
-        rotary_emb: Tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
-        past_key_value: Optional[LLMCache] = None,
-    ):
-        batch_size, max_seq_len, _ = hidden_states.shape
-
-        xq = self.wq_.forward(hidden_states, input_args)
-        xk = self.wk_.forward(hidden_states, input_args)
-        xv = self.wv_.forward(hidden_states, input_args)
-
-        # conver shape to multi head
-        xq = xq.view(batch_size, max_seq_len, self.n_heads_, self.head_dim_).transpose(
-            1, 2
-        )
-        xk = xk.view(
-            batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_
-        ).transpose(1, 2)
-        xv = xv.view(
-            batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_
-        ).transpose(1, 2)
-
-        # apply rotary embedding
-        cos, sin = rotary_emb
-        xq, xk = apply_rotary_pos_emb(xq, xk, cos, sin)
-
-        if past_key_value is not None:
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "cache_position": cache_position,
-            }
-            xk, xv = past_key_value.update(xk, xv, self.layer_idx_, cache_kwargs)
-
-        xq = xq.transpose(1, 2)
-        xk = xk.transpose(1, 2)
-        xv = xv.transpose(1, 2)
 
         input_dtype = xq.dtype
+        target_dtype = None
         if input_dtype == torch.float32:
             if executor.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16
-            xq = xq.to(target_dtype)
-            xk = xk.to(target_dtype)
-            xv = xv.to(target_dtype)
 
-        attn_output = flash_attention_forward(
+        attention_score = self.attention_interface_(
             xq,
             xk,
             xv,
             attention_mask,
-            max_seq_len,
+            scaling=self.scaling_,
+            # eager attention arguments
+            model_config=self.config_,
+            # flash attention arguments
+            query_length=max_seq_len,
             is_causal=self.is_causal_,
-        ).to(input_dtype)
+            target_dtype=target_dtype,
+        )
+        attention_score = attention_score.reshape(
+            batch_size, max_seq_len, -1
+        ).contiguous()
 
-        attn_output = attn_output.reshape(batch_size, max_seq_len, -1).contiguous()
-        attn_output = self.wo_.forward(attn_output, input_args)
-
-        return attn_output
-
-
-LLAMA_ATTENTION_CLASSES = {
-    "eager": LlamaAttention,
-    "flash_attn": LlamaFlashAttention,
-}
+        # get output attention score
+        return self.o_proj_.forward(attention_score, input_args)
 
 
 class LlamaMLP(LLMFeedForward):
@@ -395,15 +327,15 @@ class LlamaMLP(LLMFeedForward):
 class LlamaRMSNorm(nn.Module):
     def __init__(self, weight: torch.Tensor, eps: float = 1e-6):
         super().__init__()
-        self.norm_eps_ = eps
-        self.weight_ = weight
+        self.weight = weight
+        self.variance_epsilon = eps
 
-    def forward(self, data: torch.Tensor) -> torch.Tensor:
-        input_dtype = data.dtype
-        v = data.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        data = data * torch.rsqrt(v + self.norm_eps_)
-
-        return (self.weight_ * data).to(input_dtype)
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
 
 
 class LlamaDecoderLayer(LLMDecoder):
@@ -557,7 +489,7 @@ class LlamaForCausalLM(LLMForCausalLM):
 
         for idx, layer in enumerate(llm_model.model.layers):
             decoder = LlamaDecoderLayer(idx)
-            decoder.self_attn_ = LLAMA_ATTENTION_CLASSES[llm_args.attn_implementation_](
+            decoder.self_attn_ = LlamaAttention(
                 layer.self_attn.q_proj,
                 layer.self_attn.k_proj,
                 layer.self_attn.v_proj,

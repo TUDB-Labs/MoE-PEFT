@@ -39,7 +39,7 @@ def compose_command(
 ):
     assert quantize in (None, "4bit", "8bit")
     assert dtype in ("fp32", "fp16", "bf16")
-    command = "python moe_peft.py"
+    command = "python -m moe_peft"
     if cuda_device is not None:
         command = f"CUDA_VISIBLE_DEVICES={cuda_device} " + command
     command += f" --base_model {base_model}"
@@ -138,10 +138,10 @@ def gen_config(
             elif task_name not in moe_peft.tasks.task_dict:
                 try:
                     load_dataset(task_name)
-                except:
+                except Exception:
                     raise RuntimeError(f"Task name '{task_name}' not exist.")
-                lora_config["name"] = f"casual_{index}"
-                lora_config["task_name"] = "casual"
+                lora_config["name"] = f"causal_{index}"
+                lora_config["task_name"] = "causal"
                 lora_config["data"] = task_name
                 lora_config["prompt"] = "alpaca"
             else:
